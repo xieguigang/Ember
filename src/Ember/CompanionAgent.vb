@@ -317,14 +317,20 @@ Public Class CompanionAgent : Implements IDisposable
 
         ' 输出格式要求（字段名与 UserProfile 属性严格一致，DataContractJsonSerializer 区分大小写）
         Call sb.AppendLine()
-        Call sb.AppendLine("请只输出如下格式的 JSON 对象，不要输出任何解释文字或 markdown 代码块标记：")
+        Call sb.AppendLine("请只输出一个 JSON 对象。必须严格使用下面列出的 5 个英文键名（一字不差，区分大小写），" &
+                           "禁止使用中文键名，禁止发明其他键名，禁止输出任何解释文字与 markdown 代码块标记：")
         Call sb.AppendLine("{")
         Call sb.AppendLine("  ""Summary"": ""用户性格的总体概要，一两句话"",")
-        Call sb.AppendLine("  ""Traits"": [""性格特征关键词"", ""可多个""],")
-        Call sb.AppendLine("  ""Interests"": [""感兴趣的话题"", ""可多个""],")
+        Call sb.AppendLine("  ""Traits"": [""性格特征关键词"", ""可以列举多个""],")
+        Call sb.AppendLine("  ""Interests"": [""感兴趣的话题"", ""可以列举多个""],")
         Call sb.AppendLine("  ""EmotionalState"": ""用户近期的主要情绪状态"",")
         Call sb.AppendLine("  ""CommunicationStyle"": ""用户偏好的沟通方式，例如：喜欢温暖细腻的关怀 / 喜欢简洁直接 / 喜欢幽默轻松""")
         Call sb.AppendLine("}")
+        Call sb.AppendLine()
+        Call sb.AppendLine("示例输出：")
+        Call sb.AppendLine("{""Summary"": ""性格温和的上班族，近期压力较大""，""Traits"": [""急性子"", ""认真负责""], " &
+                           """Interests"": [""网球""], ""EmotionalState"": ""工作压力大，略疲惫"", " &
+                           """CommunicationStyle"": ""喜欢被温柔耐心地倾听""}")
 
         Return sb.ToString()
     End Function

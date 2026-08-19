@@ -51,13 +51,18 @@ Module Program
         Call PrintBanner(agent, restoredMessages)
 
         ' 开场问候：老用户简短欢迎，新用户由 LLM 以人设身份主动打招呼
+        '（问候正文在请求过程中已由 LLMClient 流式输出，此处只打前缀与收尾换行，避免重复打印）
         If restoredMessages > 0 Then
             Call Console.WriteLine("欢迎回来！我们接着上次的聊吧～")
             Call Console.WriteLine()
         Else
+            Call Console.Write($"{agent.Persona.Name}> ")
             Dim greeting As String = Await agent.GreetAsync()
-            If Not String.IsNullOrWhiteSpace(greeting) Then
-                Call Console.WriteLine($"{agent.Persona.Name}> {greeting.Trim()}")
+            If String.IsNullOrWhiteSpace(greeting) Then
+                Call Console.WriteLine("（问候生成失败，不过没关系，你可以直接开始输入）")
+                Call Console.WriteLine()
+            Else
+                Call Console.WriteLine()
                 Call Console.WriteLine()
             End If
         End If

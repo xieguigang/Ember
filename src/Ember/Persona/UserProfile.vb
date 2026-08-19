@@ -72,6 +72,28 @@ Public Class UserProfile
     End Function
 
     ''' <summary>
+    ''' LLM 常见中文键名 → 英文属性名映射（供 <see cref="FromLlmJson"/> 归一化兜底使用）。
+    ''' </summary>
+    Private Shared ReadOnly FieldNameMap As New Dictionary(Of String, String) From {
+        {"总体印象", NameOf(Summary)},
+        {"总体概要", NameOf(Summary)},
+        {"性格概要", NameOf(Summary)},
+        {"性格特征", NameOf(Traits)},
+        {"性格特点", NameOf(Traits)},
+        {"特征", NameOf(Traits)},
+        {"兴趣爱好", NameOf(Interests)},
+        {"兴趣偏好", NameOf(Interests)},
+        {"兴趣话题", NameOf(Interests)},
+        {"兴趣", NameOf(Interests)},
+        {"近期情绪", NameOf(EmotionalState)},
+        {"情绪状态", NameOf(EmotionalState)},
+        {"近期情绪状态", NameOf(EmotionalState)},
+        {"沟通偏好", NameOf(CommunicationStyle)},
+        {"沟通方式", NameOf(CommunicationStyle)},
+        {"偏好的沟通方式", NameOf(CommunicationStyle)}
+    }
+
+    ''' <summary>
     ''' 从 LLM 总结输出的 JSON 文本容错解析画像。
     ''' </summary>
     ''' <param name="json">LLM 输出的 JSON 文本（可包含 markdown 代码块包裹）</param>
@@ -98,6 +120,12 @@ Public Class UserProfile
             Return Nothing
         End If
         text = text.Substring(start, [end] - start + 1)
+
+        ' 中文键名归一化：部分模型会无视英文键名要求输出中文键，
+        ' 在文本层面将已知中文键名替换为英文属性名后再解析（无法识别的键会被安全忽略）
+        For Each mapping In FieldNameMap
+            text = text.Replace($"""{mapping.Key}""", $"""{mapping.Value}""")
+        Next
 
         Try
             Dim profile As UserProfile = text.LoadJSON(Of UserProfile)(simpleDict:=True, throwEx:=False)
