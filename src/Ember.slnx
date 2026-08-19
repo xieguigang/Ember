@@ -4,6 +4,9 @@
     <Platform Name="x64" />
   </Configurations>
   <Folder Name="/framework/">
+    <Project Path="../../GCModeller/src/runtime/httpd/src/Flute/Flute.NET5.vbproj">
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
     <Project Path="../../GCModeller/src/runtime/sciBASIC#/Microsoft.VisualBasic.Core/src/Core.vbproj">
       <Platform Solution="*|x64" Project="x64" />
     </Project>
