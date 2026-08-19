@@ -1,6 +1,6 @@
 Imports System.IO
 Imports System.Text
-Imports System.Threading.Tasks
+Imports Ember.AgentRuntime
 
 ''' <summary>
 ''' Ember 情感陪伴智能体程序入口：两种互斥运行模式。
@@ -48,7 +48,7 @@ Module Program
         ' 解析命令行参数
         Dim portOverride As Integer = 0
         Dim wwwrootOverride As String = Nothing
-        Dim opts As Opts = Ember.Opts.Build(args)
+        Dim opts As Opts = Opts.Build(args)
 
         If opts.help Then
             Call PrintHelp()

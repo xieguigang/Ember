@@ -71,7 +71,7 @@ Public Class UserProfile
     End Function
 
     ''' <summary>
-    ''' LLM 常见中文键名 → 英文属性名映射（供 <see cref="FromLlmJson"/> 归一化兜底使用）。
+    ''' LLM 常见中文键名 → 英文属性名映射（供 "FromLlmJson" 归一化兜底使用）。
     ''' </summary>
     Private Shared ReadOnly FieldNameMap As New Dictionary(Of String, String) From {
         {"总体印象", NameOf(Summary)},
