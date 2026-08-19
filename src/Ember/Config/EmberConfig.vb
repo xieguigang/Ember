@@ -251,34 +251,6 @@ Namespace AgentRuntime
         ' ==================== Web 静态目录解析 ====================
 
         ''' <summary>
-        ''' 获取程序可执行文件所在目录（优先 <see cref="Environment.ProcessPath"/>，
-        ''' 不受运行期间工作目录切换影响）。
-        ''' </summary>
-        Public Shared Function GetExecutableDirectory() As String
-            Dim exePath As String = Nothing
-
-            Try
-                exePath = Environment.ProcessPath
-            Catch
-            End Try
-
-            If String.IsNullOrWhiteSpace(exePath) Then
-                exePath = Reflection.Assembly.GetEntryAssembly()?.Location
-            End If
-
-            If String.IsNullOrWhiteSpace(exePath) Then
-                exePath = AppDomain.CurrentDomain.BaseDirectory
-            End If
-
-            ' 若得到的是文件路径则取其目录，否则视为目录
-            If File.Exists(exePath) Then
-                Return Path.GetDirectoryName(Path.GetFullPath(exePath))
-            Else
-                Return Path.GetFullPath(exePath)
-            End If
-        End Function
-
-        ''' <summary>
         ''' 判断候选目录是否为有效的前端根目录：目录存在且包含 index.html。
         ''' （仅按目录名探测会误命中项目内同名的服务端源码目录 Web\，故以 index.html 为标志文件）
         ''' </summary>
@@ -306,7 +278,7 @@ Namespace AgentRuntime
             End If
 
             ' 3. 自动探测
-            Dim exeDir As String = GetExecutableDirectory()
+            Dim exeDir As String = App.HOME
 
             ' 3a. exe 同级 web
             Dim candidate As String = System.IO.Path.Combine(exeDir, "web")
@@ -334,8 +306,10 @@ Namespace AgentRuntime
         Private Shared Function ResolveRelative(rawPath As String) As String
             If System.IO.Path.IsPathRooted(rawPath) Then
                 Return rawPath
+            ElseIf rawPath.DirectoryExists Then
+                Return rawPath
             Else
-                Return System.IO.Path.Combine(GetExecutableDirectory(), rawPath)
+                Return System.IO.Path.Combine(App.HOME, rawPath)
             End If
         End Function
 
