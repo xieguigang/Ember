@@ -4,10 +4,16 @@ Namespace Application
 
     Module Repl
 
+        ''' <summary>Ctrl+C 退出标志（CLI 模式：主循环检测；HTTP 模式：触发服务器关闭）</summary>
+        Friend _cancelled As Boolean = False
+
+        ''' <summary>需要从输入中清理的零宽字符（管道/重定向输入可能携带的 BOM 等）</summary>
+        ReadOnly _zeroWidthChars As Char() = {ChrW(&HFEFF), ChrW(&H200B), ChrW(&H200C), ChrW(&H200D)}
+
         ' ==================== CLI 交互模式（默认） ====================
 
         ''' <summary>CLI 模式入口：创建智能体并进入交互命令循环。</summary>
-        Private Function RunCliMode(config As EmberConfig) As Integer
+        Friend Function RunCliMode(config As EmberConfig) As Integer
             Dim restoredMessages As Integer
 
             Using agent As CompanionAgent = CompanionAgent.Create(config, restoredMessages)

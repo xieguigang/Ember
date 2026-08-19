@@ -1,8 +1,6 @@
-Imports System.IO
 Imports System.Text
 Imports Ember.AgentRuntime
 Imports Ember.Application
-Imports Ember.Web
 
 ''' <summary>
 ''' Ember 情感陪伴智能体程序入口：两种互斥运行模式。
@@ -16,18 +14,12 @@ Imports Ember.Web
 ''' </summary>
 Module Program
 
-    ''' <summary>Ctrl+C 退出标志（CLI 模式：主循环检测；HTTP 模式：触发服务器关闭）</summary>
-    Dim _cancelled As Boolean = False
-
-    ''' <summary>需要从输入中清理的零宽字符（管道/重定向输入可能携带的 BOM 等）</summary>
-    ReadOnly _zeroWidthChars As Char() = {ChrW(&HFEFF), ChrW(&H200B), ChrW(&H200C), ChrW(&H200D)}
-
     Function Main(args As String()) As Integer
         ' Ctrl+C 安全退出：阻止进程被直接终止，改由统一流程落盘后正常退出
         AddHandler Console.CancelKeyPress,
             Sub(sender, e)
                 e.Cancel = True
-                _cancelled = True
+                Repl._cancelled = True
                 Call Console.WriteLine()
                 Call Console.WriteLine("(检测到 Ctrl+C，正在准备安全退出…再次按下将强制终止)")
 
@@ -62,7 +54,7 @@ Module Program
         If opts.http_mode Then
             Return Http.RunHttpService(config, portOverride, wwwrootOverride)
         Else
-            Return RunCliMode(config)
+            Return Repl.RunCliMode(config)
         End If
     End Function
 
