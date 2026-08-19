@@ -1,6 +1,7 @@
 Imports System.IO
 Imports System.Text
 Imports Ember.AgentRuntime
+Imports Ember.Web
 
 ''' <summary>
 ''' Ember 情感陪伴智能体程序入口：两种互斥运行模式。
