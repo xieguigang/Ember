@@ -18,8 +18,9 @@ Public Class CompanionAgent : Implements IDisposable
 
     ''' <summary>总结客户端所用的固定系统提示词</summary>
     Private Const SUMMARY_SYSTEM_PROMPT As String =
-        "你是一个用户画像分析引擎。你的唯一任务是根据给定的对话记录，" &
-        "客观地总结用户的性格画像，并严格按照要求的 JSON 格式输出，不输出任何其他内容。"
+        "你是一位善于观察的性格分析师。你的唯一任务是根据一段情感陪伴聊天记录，" &
+        "总结聊天对象（记录中以 user 身份发言的一方）的性格特点、兴趣爱好、近期情绪与沟通偏好，" &
+        "并严格按照要求的行格式输出，不输出任何其他内容。"
 
     ''' <summary>画像总结时每条消息截断的最大字符数（防止超长消息撑爆总结 prompt）</summary>
     Private Const MAX_MESSAGE_CHARS As Integer = 500
@@ -284,8 +285,9 @@ Public Class CompanionAgent : Implements IDisposable
     Private Function BuildSummaryPrompt(recent As List(Of ChatMessage), recalled As ChatMessage()) As String
         Dim sb As New StringBuilder()
 
-        Call sb.AppendLine("你正在长期陪伴一位用户进行情感交流。为了更好地理解 TA、调整你的陪伴语气，" &
-                           "请根据下面的对话信息总结这位用户的性格画像。")
+        Call sb.AppendLine("你是一位贴心的伙伴，正在长期陪伴一位朋友进行情感交流。" &
+                           "下面的聊天记录中，user 是你陪伴的这位朋友，assistant 是你自己。" &
+                           "请回顾你们的对话，总结这位朋友的性格特点，帮助你以后更好地陪伴 TA、调整说话的语气。")
 
         ' 当前已有画像
         Call sb.AppendLine()
