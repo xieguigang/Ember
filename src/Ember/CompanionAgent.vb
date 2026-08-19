@@ -50,6 +50,29 @@ Public Class CompanionAgent : Implements IDisposable
     Dim _profileDirty As Boolean
     Dim _userTurnCount As Integer
 
+    ' ==================== 每日日记状态 ====================
+
+    ''' <summary>当前对话日（yyyy-MM-dd；跨天自动滚动重置当日起点）</summary>
+    Dim _today As String = ""
+
+    ''' <summary>今日首条新消息在完整消息导出列表中的索引（日记素材起点）</summary>
+    Dim _todayStartIndex As Integer = 0
+
+    ''' <summary>已成功自动生成日记的日期（同一天成功后不再自动触发，手动可重写）</summary>
+    Dim _lastAutoDiaryDate As String = ""
+
+    ''' <summary>
+    ''' 滚动检测对话日：跨天时重置当日起点（必须在持有 _gate 时、每轮 Chat 之前调用）。
+    ''' </summary>
+    Private Sub RollTodayBoundary()
+        Dim todayStr As String = Date.Today.ToString(DiaryStore.DATE_FORMAT)
+
+        If Not String.Equals(_today, todayStr) Then
+            _today = todayStr
+            _todayStartIndex = _mainClient.Context.Count   ' 本轮用户消息入队前
+        End If
+    End Sub
+
     ' ==================== 实时对话流状态（供 Web 前端轮询） ====================
 
     ''' <summary>实时状态轻量锁：仅保护 _live* 字段的读写（不与 _gate 互斥，轮询永不阻塞对话）</summary>
@@ -250,6 +273,9 @@ Public Class CompanionAgent : Implements IDisposable
                 End SyncLock
             End Sub)
 
+        ' 滚动检测对话日（跨天重置日记素材起点；本轮用户消息入队前记录索引）
+        Call RollTodayBoundary()
+
         Try
             response = Await _mainClient.Chat(userInput)
             Call Console.WriteLine()
@@ -282,6 +308,23 @@ Public Class CompanionAgent : Implements IDisposable
             Catch ex As Exception
                 Call Console.Error.WriteLine($"[画像总结失败] {ex.Message}（不影响对话，下个周期重试）")
             End Try
+        End If
+
+        ' 当日首次完成对话后，后台自动写一篇日记（不阻塞本轮返回；
+        ' WriteDiaryAsync 自行获取互斥门，成功后当天不再自动重复）
+        If Not String.Equals(_lastAutoDiaryDate, _today) Then
+            Dim diaryDay As String = _today
+            Call Task.Run(Async Function()
+                              Try
+                                  Dim entry As DiaryEntry = Await WriteDiaryAsync()
+                                  If entry IsNot Nothing Then
+                                      _lastAutoDiaryDate = diaryDay
+                                      Call Console.WriteLine($"[系统] 已写好 {diaryDay} 的陪伴日记，可用 /diary 查看。")
+                                  End If
+                              Catch ex As Exception
+                                  Call Console.Error.WriteLine($"[日记自动生成失败] {ex.Message}（可手动 /diary gen 生成）")
+                              End Try
+                          End Function)
         End If
 
         Return New ChatResult With {
@@ -339,6 +382,142 @@ Public Class CompanionAgent : Implements IDisposable
         Call Console.WriteLine("[系统] 画像已更新，从下一轮对话开始我会用更适合你的方式和你聊天。")
         Call Console.WriteLine()
         Return True
+    End Function
+
+    ' ==================== 每日日记（互斥） ====================
+
+    ''' <summary>
+    ''' 手动生成/重写今日日记（经 <see cref="_gate"/> 互斥）。
+    ''' </summary>
+    ''' <returns>生成的日记条目；今日无对话内容或生成失败时返回 Nothing</returns>
+    Public Async Function WriteDiaryAsync() As Task(Of DiaryEntry)
+        Await _gate.WaitAsync()
+        Try
+            Return Await WriteDiaryCoreAsync()
+        Finally
+            Call _gate.Release()
+        End Try
+    End Function
+
+    ''' <summary>日记生成核心逻辑（必须在持有 <see cref="_gate"/> 时调用）。</summary>
+    Private Async Function WriteDiaryCoreAsync() As Task(Of DiaryEntry)
+        If String.IsNullOrEmpty(_today) Then Call RollTodayBoundary()
+
+        ' 1. 取今日对话素材（自当日起点以来的 user/assistant 消息）
+        Dim all As List(Of ChatMessage) = _mainClient.Context.ExportMessages()
+        Dim start As Integer = Math.Min(_todayStartIndex, all.Count)
+        Dim dayMessages As List(Of ChatMessage) = all _
+            .Skip(start) _
+            .Where(Function(m) m IsNot Nothing AndAlso
+                                (m.Role = "user" OrElse m.Role = "assistant") AndAlso
+                                Not String.IsNullOrWhiteSpace(m.Content)) _
+            .ToList()
+
+        If dayMessages.Count = 0 Then
+            Call Console.WriteLine("[系统] 今天还没有对话内容，暂无日记可写。")
+            Return Nothing
+        End If
+
+        Call Console.WriteLine($"[系统] 正在把今天的 {dayMessages.Count} 条对话写成日记…")
+
+        ' 2. 复用总结客户端：临时切换为日记写作者角色，请求后恢复
+        '   （preserveMemory:=False 的一次性请求，不污染主对话上下文）
+        Dim savedSystem As String = _sumClient.system_message
+        _sumClient.system_message = _persona.Description.Trim() & vbCrLf &
+            "你正在以这个身份写日记。请用第一人称，以真诚温暖的笔触记录陪伴经历。"
+
+        Dim entry As DiaryEntry = Nothing
+        Try
+            ' 3. 构造日记 prompt 并请求
+            Dim prompt As New StringBuilder()
+            Call prompt.AppendLine("以下是今天你和用户之间的全部对话记录（user 是用户，assistant 是你）。")
+            Call prompt.AppendLine("请以你的身份写一篇今天的日记，要求：")
+            Call prompt.AppendLine("1. 第一行是日记标题（不要带引号、不要"标题："前缀、不要 markdown 记号），简洁而有温度；")
+            Call prompt.AppendLine("2. 从第二行起是正文：用第一人称回顾今天你们聊了什么、用户的情绪与状态、")
+            Call prompt.AppendLine("   值得纪念的瞬间以及你自己的感受，语气自然真诚，200~400 字；")
+            Call prompt.AppendLine("3. 只输出标题和正文，不要任何其他解释。")
+            Call prompt.AppendLine()
+            Call prompt.AppendLine("【今日对话记录】")
+            For Each msg In dayMessages
+                Dim content As String = msg.Content.Trim().Replace(vbCrLf, " ")
+                If content.Length > MAX_MESSAGE_CHARS Then
+                    content = content.Substring(0, MAX_MESSAGE_CHARS) & "…"
+                End If
+                Call prompt.AppendLine($"{msg.Role}: {content}")
+            Next
+
+            Dim response As LLMsResponse = Await _sumClient.Chat(prompt.ToString())
+
+            ' 4. 解析：首行标题（容错剥离前缀记号），其余为正文
+            Dim text As String = (If(response, New LLMsResponse).output ?? "").Trim()
+            Dim lines As String() = text.Split({vbCrLf, vbLf, vbCr}, StringSplitOptions.RemoveEmptyEntries)
+
+            If lines.Length = 0 OrElse String.IsNullOrWhiteSpace(text) Then
+                Call Console.WriteLine("[系统] 日记生成结果为空，本次未保存。")
+                Return Nothing
+            End If
+
+            Dim title As String = lines(0).Trim().Trim("#"c, "*"c, " "c, "【"c, "】"c, """"c)
+            ' 容错剥离"标题："类前缀（中英文冒号均处理）
+            For Each prefix As String In {"标题：", "标题:", "Title:", "《"}
+                If title.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) Then
+                    title = title.Substring(prefix.Length).Trim()
+                End If
+            Next
+            title = title.TrimEnd("》"c, " "c)
+            If title.Length > 60 Then title = title.Substring(0, 60) & "…"
+
+            Dim body As String = String.Join(vbCrLf, lines.Skip(1)).Trim()
+            If body.Length = 0 Then body = text.Trim()
+
+            entry = New DiaryEntry With {
+                .[date] = _today,
+                .title = If(title.Length = 0, $"{Date.Today.Month}月{Date.Today.Day}日的陪伴日记", title),
+                .content = body,
+                .generatedAt = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"),
+                .turnCount = _userTurnCount
+            }
+
+            ' 5. 落盘
+            If DiaryStore.Save(_config.DiaryDir, entry) Then
+                Call Console.WriteLine($"[系统] 日记已保存：《{entry.title}》")
+            End If
+        Catch ex As Exception
+            Call Console.Error.WriteLine($"[日记生成失败] {ex.Message}")
+            Return Nothing
+        Finally
+            _sumClient.system_message = savedSystem
+        End Try
+
+        Return entry
+    End Function
+
+    ''' <summary>
+    ''' 读取指定日期的日记（经 <see cref="_gate"/> 互斥）；不存在返回 Nothing。
+    ''' </summary>
+    ''' <param name="[date]">日记日期（yyyy-MM-dd）；空串或缺省取今日</param>
+    Public Async Function GetDiaryAsync(Optional [date] As String = Nothing) As Task(Of DiaryEntry)
+        Await _gate.WaitAsync()
+        Try
+            If String.IsNullOrWhiteSpace([date]) Then
+                [date] = Date.Today.ToString(DiaryStore.DATE_FORMAT)
+            End If
+            Return DiaryStore.Load(_config.DiaryDir, [date].Trim())
+        Finally
+            Call _gate.Release()
+        End Try
+    End Function
+
+    ''' <summary>
+    ''' 列出全部日记摘要（按日期倒序，经 <see cref="_gate"/> 互斥）。
+    ''' </summary>
+    Public Async Function ListDiariesAsync() As Task(Of List(Of DiaryEntry))
+        Await _gate.WaitAsync()
+        Try
+            Return DiaryStore.ListAll(_config.DiaryDir)
+        Finally
+            Call _gate.Release()
+        End Try
     End Function
 
     ''' <summary>
