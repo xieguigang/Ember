@@ -168,6 +168,47 @@ Namespace Web
             End Try
         End Sub
 
+        ''' <summary>
+        ''' 头像列表：扫描头像图片目录（*.jpg/*.png/*.webp/*.gif，字母排序，默认图置首），
+        ''' 供前端头像选择面板使用。目录不存在时返回空列表（前端回退 emoji）。
+        ''' </summary>
+        <HttpGet("/api/avatars")>
+        Public Sub GetAvatars(request As HttpRequest, response As HttpResponse)
+            Try
+                Call AllowCors(response)
+
+                Dim list As New AvatarListResult With {
+                    .urlPrefix = "/resource/images/avatars/",
+                    .avatars = New List(Of String)
+                }
+
+                Dim dir As String = _agent.GetAvatarDirectory()
+                If IO.Directory.Exists(dir) Then
+                    Dim files As String() = IO.Directory.GetFiles(dir, "*.*") _
+                        .Where(Function(f) AVATAR_EXTENSIONS.Contains(IO.Path.GetExtension(f).ToLowerInvariant())) _
+                        .Select(Function(f) IO.Path.GetFileName(f)) _
+                        .OrderBy(Function(f) f, StringComparer.OrdinalIgnoreCase) _
+                        .ToArray()
+
+                    ' 默认头像置首
+                    Dim defaultFile As String = files.FirstOrDefault(
+                        Function(f) String.Equals(f, DEFAULT_AVATAR, StringComparison.OrdinalIgnoreCase))
+                    If defaultFile IsNot Nothing Then
+                        list.avatars.Add(defaultFile)
+                    End If
+                    For Each f In files
+                        If Not String.Equals(f, defaultFile, StringComparison.OrdinalIgnoreCase) Then
+                            list.avatars.Add(f)
+                        End If
+                    Next
+                End If
+
+                Call response.WriteJSON(Envelope(list))
+            Catch ex As Exception
+                Call Fail(response, ex)
+            End Try
+        End Sub
+
         ' ==================== 持久化 ====================
 
         <HttpPost("/api/save")>

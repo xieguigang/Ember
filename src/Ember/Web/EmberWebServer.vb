@@ -24,6 +24,7 @@ Namespace Web
         ReadOnly _agent As CompanionAgent
         ReadOnly _port As Integer
         ReadOnly _wwwroot As String
+        ReadOnly _agentWebRoot As String
         ReadOnly _configs As Configuration
         Dim _server As HttpSocket
 
@@ -48,19 +49,26 @@ Namespace Web
         ''' <param name="port">监听端口</param>
         ''' <param name="wwwroot">Web 静态文件根目录</param>
         ''' <param name="shutdownToken">远程关闭令牌（空字符串=禁用远程关闭）</param>
-        Public Sub New(agent As CompanionAgent, port As Integer, wwwroot As String, shutdownToken As String)
+        ''' <param name="agentWebRoot">
+        ''' Agent 资源 Web 根（如 agent\web，含 resource\images\avatars 头像图片）；
+        ''' 非空且存在时作为静态服务第二根挂载，使 /resource/* 命中其中的物理文件；
+        ''' 为空时退化为单根挂载。
+        ''' </param>
+        Public Sub New(agent As CompanionAgent, port As Integer, wwwroot As String, shutdownToken As String,
+                       Optional agentWebRoot As String = "")
             If Not Tcp.PortIsAvailable(port) Then
                 Throw New InvalidOperationException($"端口 {port} 已被其他程序占用，无法启动 HTTP 服务模式。" &
-                                                $"请关闭占用程序，或通过命令行 --port / settings.ini [web] http_port 更换端口。")
+                                                    $"请关闭占用程序，或通过命令行 --port / settings.ini [web] http_port 更换端口。")
             End If
 
             _agent = agent
             _port = port
             _wwwroot = wwwroot
+            _agentWebRoot = agentWebRoot
             _configs = New Configuration With {
-            .shutdown_token = If(shutdownToken, "").Trim(),
-            .silent = True
-        }
+                .shutdown_token = If(shutdownToken, "").Trim(),
+                .silent = True
+            }
         End Sub
 
         ''' <summary>
@@ -71,8 +79,14 @@ Namespace Web
             ' 1. 反射注册 /api/* 端点
             Dim router As New HttpRouter(New EmberApiController(_agent))
 
-            ' 2. 挂载静态文件服务（Web 前端），静态命中优先于 API 路由
-            Call router.MountFs(New WebFileSystemListener(_wwwroot))
+            ' 2. 挂载静态文件服务：主根=Web 前端；agentWebRoot 存在时追加第二根
+            '    （Flute 多根按顺序逐个查找物理文件，/resource/images/avatars/* 命中 agent 资源目录）
+            If Not String.IsNullOrWhiteSpace(_agentWebRoot) AndAlso IO.Directory.Exists(_agentWebRoot) Then
+                Call router.MountFs(New WebFileSystemListener(New FileSystem(_wwwroot), New FileSystem(_agentWebRoot)))
+                Call Console.WriteLine($"资源: {_agentWebRoot}（头像等 agent 静态资源）")
+            Else
+                Call router.MountFs(New WebFileSystemListener(_wwwroot))
+            End If
 
             ' 3. 组装 HttpSocket（携带 shutdown_token 配置，启用 Flute 内置远程关闭端点）
             _server = New HttpSocket(router, _port, configs:=_configs)

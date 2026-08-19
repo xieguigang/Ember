@@ -155,14 +155,13 @@ Namespace AgentRuntime
         Public ReadOnly Property AgentWebRoot As String
             Get
                 ' avatarDir 形如 ...\agent\web\resource\images\avatars → 上溯三级到 agent\web
-                Dim dir As DirectoryInfo = TryCast(New DirectoryInfo(AvatarDir), DirectoryInfo)
-                If dir Is Nothing OrElse dir.Parent Is Nothing Then Return ""
+                If String.IsNullOrWhiteSpace(AvatarDir) Then Return ""
 
-                Dim imagesDir As DirectoryInfo = dir.Parent              ' images
-                If imagesDir.Parent Is Nothing Then Return ""
-                Dim resourceDir As DirectoryInfo = imagesDir.Parent      ' resource
-                If resourceDir.Parent Is Nothing Then Return ""
-                Dim webRoot As DirectoryInfo = resourceDir.Parent        ' web
+                Dim dir As New DirectoryInfo(AvatarDir)
+                If dir.Parent Is Nothing Then Return ""                    ' images
+                If dir.Parent.Parent Is Nothing Then Return ""            ' resource
+                Dim webRoot As DirectoryInfo = dir.Parent.Parent.Parent    ' web
+                If webRoot Is Nothing Then Return ""
 
                 If String.Equals(webRoot.Name, "web", StringComparison.OrdinalIgnoreCase) AndAlso webRoot.Exists Then
                     Return webRoot.FullName
@@ -245,6 +244,7 @@ Namespace AgentRuntime
                 http_port = ini.ReadInt32(SECTION_WEB, NameOf(http_port), http_port)
                 wwwroot = ini.ReadString(SECTION_WEB, NameOf(wwwroot), wwwroot)
                 shutdown_token = ini.ReadString(SECTION_WEB, NameOf(shutdown_token), shutdown_token)
+                avatar_dir = ini.ReadString(SECTION_WEB, NameOf(avatar_dir), avatar_dir)
             End Using
 
             ' 数值参数合法性保护
@@ -266,7 +266,35 @@ Namespace AgentRuntime
 
             _dataDirectory = Path.GetFullPath(dir)
             Call Directory.CreateDirectory(_dataDirectory)
+
+            ' 解析头像目录：ini 显式配置优先（相对路径基于 exe 目录）；空则自动探测
+            _avatarDir = ResolveAvatarDir()
         End Sub
+
+        ''' <summary>
+        ''' 解析头像图片目录：ini [web] avatar_dir 显式配置（相对路径基于 exe 目录）
+        ''' → 自动探测（从 exe 目录向上逐级查找 agent\web\resource\images\avatars，最多 8 级）
+        ''' → 回退 exe 同级 avatars。
+        ''' </summary>
+        Private Function ResolveAvatarDir() As String
+            If Not String.IsNullOrWhiteSpace(avatar_dir) Then
+                Return Path.GetFullPath(ResolveRelative(avatar_dir.Trim()))
+            End If
+
+            Dim exeDir As String = GetExecutableDirectory()
+            Dim dir As New DirectoryInfo(exeDir)
+
+            For i As Integer = 0 To 8
+                Dim candidate As String = Path.Combine(dir.FullName, "agent", "web", "resource", "images", "avatars")
+                If Directory.Exists(candidate) Then
+                    Return candidate
+                End If
+                If dir.Parent Is Nothing Then Exit For
+                dir = dir.Parent
+            Next
+
+            Return Path.Combine(exeDir, "avatars")
+        End Function
 
         ''' <summary>生成带注释的默认配置文件（目录不存在时自动创建）。</summary>
         Private Shared Sub WriteDefaultIni(iniPath As String)
@@ -292,6 +320,7 @@ Namespace AgentRuntime
                 Call ini.WriteValue(SECTION_WEB, NameOf(http_port), "8080", "--http 模式监听端口，命令行 --port 可覆盖")
                 Call ini.WriteValue(SECTION_WEB, NameOf(wwwroot), "", "Web 静态文件根目录；留空则自动探测（exe 同级 web 目录，或向上逐级查找名为 web 的目录）")
                 Call ini.WriteValue(SECTION_WEB, NameOf(shutdown_token), "", "远程关闭令牌：设置后可在 Web 界面输入该令牌远程安全关闭服务（自动保存数据后退出）；留空禁用远程关闭")
+                Call ini.WriteValue(SECTION_WEB, NameOf(avatar_dir), "", "头像图片目录：Web 头像选择列表的扫描来源；留空则自动探测（向上查找 agent\\web\\resource\\images\\avatars）")
 
                 Call ini.Flush()
             End Using
