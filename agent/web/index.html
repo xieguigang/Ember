@@ -1,17 +1,14 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="description" content="Ember · 你的情感陪伴伙伴">
     <title>Ember · 你的情感陪伴伙伴</title>
-    <link rel="icon"
-        href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='0.9em' font-size='90'>🔥</text></svg>">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='0.9em' font-size='90'>🔥</text></svg>">
     <link rel="stylesheet" href="./resource/styles/style.css">
 </head>
-
-<body>
+<body data-theme="coral">
     <div id="app">
 
         <!-- ==================== 顶栏 ==================== -->
@@ -20,10 +17,11 @@
                 <button class="hamburger" id="hamburgerBtn" title="打开信息面板" aria-label="打开信息面板">
                     <span></span><span></span><span></span>
                 </button>
-                <div class="logo-badge">🔥</div>
+                <div class="logo-badge" id="logoBadge">🔥</div>
                 <h1 class="app-title">Ember <span class="app-subtitle">你的情感陪伴伙伴</span></h1>
             </div>
             <div class="topbar-right">
+                <button class="icon-btn" id="themeBtn" title="切换主题" aria-label="切换主题">🎨</button>
                 <span class="model-chip" id="modelChip" title="当前对话模型">…</span>
                 <span class="conn-status" id="connStatus">
                     <span class="conn-dot" id="connDot"></span>
@@ -41,7 +39,11 @@
                     <!-- 人设卡 -->
                     <section class="card persona-card">
                         <div class="card-header">
-                            <div class="avatar avatar-ember">🔥</div>
+                            <button class="avatar avatar-ember avatar-btn" id="personaAvatarBtn" title="点击更换头像">
+                                <img id="personaAvatarImg" alt="Ember 头像" src="/resource/images/avatars/ember_default.jpg"
+                                     onerror="this.closest('.avatar').classList.add('avatar-fallback'); this.style.display='none';">
+                                <span class="avatar-emoji">🔥</span>
+                            </button>
                             <div class="card-title-group">
                                 <h2 class="card-title" id="personaName">Ember</h2>
                                 <span class="card-badge" id="personaBadge">默认人设</span>
@@ -72,6 +74,24 @@
                         </div>
                     </section>
 
+                    <!-- 日记卡 -->
+                    <section class="card diary-card" id="diaryCard">
+                        <div class="card-header">
+                            <div class="avatar avatar-diary">📔</div>
+                            <div class="card-title-group">
+                                <h2 class="card-title">陪伴日记</h2>
+                                <span class="card-badge badge-lemon" id="diaryDateBadge"></span>
+                            </div>
+                        </div>
+                        <div id="diaryBody">
+                            <p class="profile-empty">✍️ 今天的日记还没有写，聊过几句后我会自动动笔～</p>
+                        </div>
+                        <div class="btn-row">
+                            <button class="btn btn-lemon btn-sm" id="openDiaryBtn">📖 翻看日记</button>
+                            <button class="btn btn-ghost btn-sm" id="writeDiaryBtn">✍️ 写日记</button>
+                        </div>
+                    </section>
+
                     <!-- 状态卡 -->
                     <section class="card status-card">
                         <div class="card-header">
@@ -81,27 +101,16 @@
                             </div>
                         </div>
                         <dl class="status-list">
-                            <div class="status-row">
-                                <dt>后端</dt>
-                                <dd id="stBackend">…</dd>
-                            </div>
-                            <div class="status-row">
-                                <dt>对话轮次</dt>
-                                <dd id="stTurns">…</dd>
-                            </div>
-                            <div class="status-row">
-                                <dt>保存模式</dt>
-                                <dd id="stAutosave">…</dd>
-                            </div>
+                            <div class="status-row"><dt>后端</dt><dd id="stBackend">…</dd></div>
+                            <div class="status-row"><dt>对话轮次</dt><dd id="stTurns">…</dd></div>
+                            <div class="status-row"><dt>保存模式</dt><dd id="stAutosave">…</dd></div>
                         </dl>
                         <div class="token-meter">
                             <div class="token-meter-head">
                                 <span>上下文用量</span>
                                 <span id="stTokenText">…</span>
                             </div>
-                            <div class="token-bar">
-                                <div class="token-fill" id="stTokenFill"></div>
-                            </div>
+                            <div class="token-bar"><div class="token-fill" id="stTokenFill"></div></div>
                         </div>
                     </section>
 
@@ -120,7 +129,7 @@
             <main class="chat-main">
                 <div class="messages" id="messages">
                     <div class="welcome-hero" id="welcomeHero">
-                        <div class="welcome-flame">🔥</div>
+                        <div class="welcome-flame" id="welcomeAvatar">🔥</div>
                         <h2>你好呀，我是 Ember</h2>
                         <p>很高兴见到你！我记得我们之间的每一次对话——<br>心情好坏都可以和我聊聊，我会一直陪着你 ☀️</p>
                     </div>
@@ -130,8 +139,8 @@
                 <div class="composer">
                     <div class="composer-hint">Enter 发送 · Shift + Enter 换行 · 我会记住我们的每次对话</div>
                     <div class="composer-row">
-                        <textarea id="inputBox" class="input-box" rows="1" placeholder="和 Ember 说点什么吧…"
-                            maxlength="4000"></textarea>
+                        <textarea id="inputBox" class="input-box" rows="1"
+                                  placeholder="和 Ember 说点什么吧…" maxlength="4000"></textarea>
                         <button class="btn-send" id="sendBtn" title="发送" aria-label="发送">
                             <span class="send-icon">➤</span>
                         </button>
@@ -141,16 +150,82 @@
         </div>
     </div>
 
+    <!-- ==================== 主题选择弹层 ==================== -->
+    <div class="modal-mask hidden" id="themeModal">
+        <div class="modal">
+            <h3 class="modal-title">🎨 选择主题</h3>
+            <p class="modal-desc">挑选一套你喜欢的配色，我会帮你记住偏好。</p>
+            <div class="theme-grid" id="themeGrid">
+                <button class="theme-cell" data-theme="coral">
+                    <span class="theme-dot" style="background:linear-gradient(135deg,#FF8A65,#FFB88C)"></span>
+                    <span class="theme-name">珊瑚橙</span>
+                </button>
+                <button class="theme-cell" data-theme="mint">
+                    <span class="theme-dot" style="background:linear-gradient(135deg,#4ECDA4,#8FE6C6)"></span>
+                    <span class="theme-name">薄荷绿</span>
+                </button>
+                <button class="theme-cell" data-theme="sky">
+                    <span class="theme-dot" style="background:linear-gradient(135deg,#5BB8F5,#9AD8F8)"></span>
+                    <span class="theme-name">天空蓝</span>
+                </button>
+                <button class="theme-cell" data-theme="sakura">
+                    <span class="theme-dot" style="background:linear-gradient(135deg,#FF9EB5,#FFC6D5)"></span>
+                    <span class="theme-name">樱花粉</span>
+                </button>
+                <button class="theme-cell" data-theme="lemon">
+                    <span class="theme-dot" style="background:linear-gradient(135deg,#F5C518,#FFE58A)"></span>
+                    <span class="theme-name">柠檬黄</span>
+                </button>
+            </div>
+            <div class="modal-actions">
+                <button class="btn btn-ghost" id="themeCloseBtn">关闭</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== 头像选择弹层 ==================== -->
+    <div class="modal-mask hidden" id="avatarModal">
+        <div class="modal">
+            <h3 class="modal-title">🖼️ 选择 Ember 的头像</h3>
+            <p class="modal-desc">从头像库中挑选一个形象，偏好会自动记住。</p>
+            <div class="avatar-grid" id="avatarGrid">
+                <p class="profile-empty">正在加载头像列表…</p>
+            </div>
+            <div class="modal-actions">
+                <button class="btn btn-ghost" id="avatarCloseBtn">关闭</button>
+            </div>
+        </div>
+    </div>
+
     <!-- ==================== 人设编辑弹层 ==================== -->
     <div class="modal-mask hidden" id="personaModal">
         <div class="modal">
             <h3 class="modal-title">✏️ 编辑 Ember 的人设</h3>
             <p class="modal-desc">描述你希望的性格与说话方式，保存后立即生效并持久化。</p>
             <textarea class="modal-textarea" id="personaInput" rows="6"
-                placeholder="例如：你是一只温柔傲娇的猫娘助手，说话带喵，但在我难过时会变得格外体贴…"></textarea>
+                      placeholder="例如：你是一只温柔傲娇的猫娘助手，说话带喵，但在我难过时会变得格外体贴…"></textarea>
             <div class="modal-actions">
                 <button class="btn btn-ghost" id="personaCancelBtn">取消</button>
                 <button class="btn btn-primary" id="personaSaveBtn">保存人设</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== 日记弹层 ==================== -->
+    <div class="modal-mask hidden" id="diaryModal">
+        <div class="modal modal-wide">
+            <div class="diary-modal-head">
+                <h3 class="modal-title">📔 陪伴日记</h3>
+                <button class="btn btn-ghost btn-sm" id="diaryRegenBtn" title="用今天的对话重新写一篇今日日记">✍️ 重写今日</button>
+                <button class="modal-x" id="diaryCloseBtn" aria-label="关闭">✕</button>
+            </div>
+            <div class="diary-layout">
+                <div class="diary-list" id="diaryListPane">
+                    <p class="profile-empty">暂无日记…</p>
+                </div>
+                <div class="diary-reader" id="diaryReader">
+                    <p class="profile-empty" style="align-self:center;text-align:center;">← 选择一篇日记开始阅读</p>
+                </div>
             </div>
         </div>
     </div>
@@ -160,8 +235,7 @@
         <div class="modal modal-danger">
             <h3 class="modal-title">⏻ 远程关闭服务</h3>
             <p class="modal-desc">关闭前会自动保存全部对话记忆、人设与画像，之后服务将安全退出。<br>请输入关闭令牌以确认：</p>
-            <input type="password" class="modal-input" id="shutdownTokenInput" placeholder="输入 shutdown_token…"
-                autocomplete="off">
+            <input type="password" class="modal-input" id="shutdownTokenInput" placeholder="输入 shutdown_token…" autocomplete="off">
             <div class="modal-actions">
                 <button class="btn btn-ghost" id="shutdownCancelBtn">取消</button>
                 <button class="btn btn-danger" id="shutdownConfirmBtn">确认关闭</button>
@@ -183,5 +257,4 @@
 
     <script src="./resource/javascript/app.js"></script>
 </body>
-
 </html>
