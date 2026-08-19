@@ -6,6 +6,7 @@
     <TargetFramework>net10.0</TargetFramework>
     <Platforms>AnyCPU;x64</Platforms>
     <GenerateDocumentationFile>True</GenerateDocumentationFile>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
