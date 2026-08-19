@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Ember · 你的情感陪伴伙伴">
+    <title>Ember · 你的情感陪伴伙伴</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='0.9em' font-size='90'>🔥</text></svg>">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="app">
+
+        <!-- ==================== 顶栏 ==================== -->
+        <header class="topbar">
+            <div class="topbar-left">
+                <button class="hamburger" id="hamburgerBtn" title="打开信息面板" aria-label="打开信息面板">
+                    <span></span><span></span><span></span>
+                </button>
+                <div class="logo-badge">🔥</div>
+                <h1 class="app-title">Ember <span class="app-subtitle">你的情感陪伴伙伴</span></h1>
+            </div>
+            <div class="topbar-right">
+                <span class="model-chip" id="modelChip" title="当前对话模型">…</span>
+                <span class="conn-status" id="connStatus">
+                    <span class="conn-dot" id="connDot"></span>
+                    <span class="conn-text" id="connText">连接中…</span>
+                </span>
+            </div>
+        </header>
+
+        <div class="layout">
+
+            <!-- ==================== 左侧信息栏 ==================== -->
+            <aside class="sidebar" id="sidebar">
+                <div class="sidebar-scroll">
+
+                    <!-- 人设卡 -->
+                    <section class="card persona-card">
+                        <div class="card-header">
+                            <div class="avatar avatar-ember">🔥</div>
+                            <div class="card-title-group">
+                                <h2 class="card-title" id="personaName">Ember</h2>
+                                <span class="card-badge" id="personaBadge">默认人设</span>
+                            </div>
+                        </div>
+                        <p class="persona-desc" id="personaDesc" title="点击展开完整人设">正在加载人设…</p>
+                        <p class="persona-updated" id="personaUpdated"></p>
+                        <div class="btn-row">
+                            <button class="btn btn-primary btn-sm" id="editPersonaBtn">✏️ 编辑人设</button>
+                            <button class="btn btn-ghost btn-sm" id="resetPersonaBtn">↺ 恢复默认</button>
+                        </div>
+                    </section>
+
+                    <!-- 画像卡 -->
+                    <section class="card profile-card" id="profileCard">
+                        <div class="card-header">
+                            <div class="avatar avatar-profile">🧒</div>
+                            <div class="card-title-group">
+                                <h2 class="card-title">我眼中的你</h2>
+                                <span class="card-badge badge-mint" id="profileUpdatedBadge"></span>
+                            </div>
+                        </div>
+                        <div id="profileBody">
+                            <p class="profile-empty">💬 多聊几轮之后，我会慢慢更懂你…</p>
+                        </div>
+                        <div class="btn-row">
+                            <button class="btn btn-mint btn-sm" id="refreshProfileBtn">✨ 重新总结</button>
+                        </div>
+                    </section>
+
+                    <!-- 状态卡 -->
+                    <section class="card status-card">
+                        <div class="card-header">
+                            <div class="avatar avatar-status">📊</div>
+                            <div class="card-title-group">
+                                <h2 class="card-title">运行状态</h2>
+                            </div>
+                        </div>
+                        <dl class="status-list">
+                            <div class="status-row"><dt>后端</dt><dd id="stBackend">…</dd></div>
+                            <div class="status-row"><dt>对话轮次</dt><dd id="stTurns">…</dd></div>
+                            <div class="status-row"><dt>保存模式</dt><dd id="stAutosave">…</dd></div>
+                        </dl>
+                        <div class="token-meter">
+                            <div class="token-meter-head">
+                                <span>上下文用量</span>
+                                <span id="stTokenText">…</span>
+                            </div>
+                            <div class="token-bar"><div class="token-fill" id="stTokenFill"></div></div>
+                        </div>
+                    </section>
+
+                    <!-- 底部操作 -->
+                    <div class="sidebar-footer">
+                        <button class="btn btn-lemon btn-block" id="saveBtn">💾 保存全部记忆</button>
+                        <button class="btn btn-danger btn-block hidden" id="shutdownBtn">⏻ 关闭服务</button>
+                    </div>
+                </div>
+            </aside>
+
+            <!-- 侧栏遮罩（窄屏抽屉） -->
+            <div class="sidebar-mask" id="sidebarMask"></div>
+
+            <!-- ==================== 聊天主区 ==================== -->
+            <main class="chat-main">
+                <div class="messages" id="messages">
+                    <div class="welcome-hero" id="welcomeHero">
+                        <div class="welcome-flame">🔥</div>
+                        <h2>你好呀，我是 Ember</h2>
+                        <p>很高兴见到你！我记得我们之间的每一次对话——<br>心情好坏都可以和我聊聊，我会一直陪着你 ☀️</p>
+                    </div>
+                </div>
+
+                <!-- ==================== 输入区 ==================== -->
+                <div class="composer">
+                    <div class="composer-hint">Enter 发送 · Shift + Enter 换行 · 我会记住我们的每次对话</div>
+                    <div class="composer-row">
+                        <textarea id="inputBox" class="input-box" rows="1"
+                                  placeholder="和 Ember 说点什么吧…" maxlength="4000"></textarea>
+                        <button class="btn-send" id="sendBtn" title="发送" aria-label="发送">
+                            <span class="send-icon">➤</span>
+                        </button>
+                    </div>
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <!-- ==================== 人设编辑弹层 ==================== -->
+    <div class="modal-mask hidden" id="personaModal">
+        <div class="modal">
+            <h3 class="modal-title">✏️ 编辑 Ember 的人设</h3>
+            <p class="modal-desc">描述你希望的性格与说话方式，保存后立即生效并持久化。</p>
+            <textarea class="modal-textarea" id="personaInput" rows="6"
+                      placeholder="例如：你是一只温柔傲娇的猫娘助手，说话带喵，但在我难过时会变得格外体贴…"></textarea>
+            <div class="modal-actions">
+                <button class="btn btn-ghost" id="personaCancelBtn">取消</button>
+                <button class="btn btn-primary" id="personaSaveBtn">保存人设</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== 远程关闭确认弹层 ==================== -->
+    <div class="modal-mask hidden" id="shutdownModal">
+        <div class="modal modal-danger">
+            <h3 class="modal-title">⏻ 远程关闭服务</h3>
+            <p class="modal-desc">关闭前会自动保存全部对话记忆、人设与画像，之后服务将安全退出。<br>请输入关闭令牌以确认：</p>
+            <input type="password" class="modal-input" id="shutdownTokenInput" placeholder="输入 shutdown_token…" autocomplete="off">
+            <div class="modal-actions">
+                <button class="btn btn-ghost" id="shutdownCancelBtn">取消</button>
+                <button class="btn btn-danger" id="shutdownConfirmBtn">确认关闭</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== 告别界面 ==================== -->
+    <div class="farewell hidden" id="farewellScreen">
+        <div class="farewell-card">
+            <div class="farewell-flame">💾</div>
+            <h2>服务已安全关闭</h2>
+            <p>全部对话记忆、人设与画像均已保存。<br>重新启动 Ember 后，我们的故事还会继续 💛</p>
+        </div>
+    </div>
+
+    <!-- ==================== Toast ==================== -->
+    <div class="toast" id="toast"></div>
+
+    <script src="app.js"></script>
+</body>
+</html>

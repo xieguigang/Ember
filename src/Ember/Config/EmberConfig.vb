@@ -322,11 +322,11 @@ Public Class EmberConfig
     End Function
 
     ''' <summary>相对路径基于 exe 所在目录解析为绝对路径。</summary>
-    Private Shared Function ResolveRelative(path As String) As String
-        If Path.IsPathRooted(path) Then
-            Return path
+    Private Shared Function ResolveRelative(rawPath As String) As String
+        If System.IO.Path.IsPathRooted(rawPath) Then
+            Return rawPath
         Else
-            Return Path.Combine(GetExecutableDirectory(), path)
+            Return System.IO.Path.Combine(GetExecutableDirectory(), rawPath)
         End If
     End Function
 

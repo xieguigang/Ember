@@ -211,7 +211,7 @@ Public Class CompanionAgent : Implements IDisposable
         ' 周期性总结用户画像并动态调整后续语气
         If _userTurnCount Mod _config.profile_interval = 0 Then
             Try
-                Call Await UpdateProfileCoreAsync()
+                Await UpdateProfileCoreAsync()
             Catch ex As Exception
                 Call Console.Error.WriteLine($"[画像总结失败] {ex.Message}（不影响对话，下个周期重试）")
             End Try
