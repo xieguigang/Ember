@@ -20,6 +20,7 @@ Public Class EmberConfig
 
     Private Const SECTION_LLM As String = "llm"
     Private Const SECTION_AGENT As String = "agent"
+    Private Const SECTION_WEB As String = "web"
 
     ' ==================== [llm] LLM 连接配置 ====================
 
@@ -57,6 +58,21 @@ Public Class EmberConfig
 
     ''' <summary>是否每轮对话后自动保存对话历史（False 时仅在退出或手动 /save 命令时保存）</summary>
     Public Property autosave As Boolean = True
+
+    ' ==================== [web] HTTP 服务模式配置 ====================
+
+    ''' <summary>HTTP 服务模式监听端口（--http 启动时生效，命令行 --port 可覆盖）</summary>
+    Public Property http_port As Integer = 8080
+
+    ''' <summary>Web 静态文件根目录（空=自动探测：exe 同级 web → 向上逐级查找；命令行 --wwwroot 可覆盖）</summary>
+    Public Property wwwroot As String = ""
+
+    ''' <summary>
+    ''' 远程关闭令牌：非空时启用 Flute 内置的 OPTIONS /ctrl/kill 远程关闭端点，
+    ''' Web 端携带 X-Shutdown-Token 请求头匹配此值即可远程安全关闭服务（关闭前自动保存全部记忆数据）；
+    ''' 留空则禁用远程关闭（默认）。注意：请勿使用弱口令，任何知道此 token 的访问者都可以关闭服务。
+    ''' </summary>
+    Public Property shutdown_token As String = ""
 
     ' ==================== 派生路径（运行时数据落盘位置） ====================
 
@@ -176,6 +192,10 @@ Public Class EmberConfig
             max_context_tokens = ini.ReadInt32(SECTION_AGENT, NameOf(max_context_tokens), max_context_tokens)
             data_dir = ini.ReadString(SECTION_AGENT, NameOf(data_dir), data_dir)
             autosave = ini.ReadBoolean(SECTION_AGENT, NameOf(autosave), autosave)
+
+            http_port = ini.ReadInt32(SECTION_WEB, NameOf(http_port), http_port)
+            wwwroot = ini.ReadString(SECTION_WEB, NameOf(wwwroot), wwwroot)
+            shutdown_token = ini.ReadString(SECTION_WEB, NameOf(shutdown_token), shutdown_token)
         End Using
 
         ' 数值参数合法性保护
@@ -185,6 +205,8 @@ Public Class EmberConfig
         If temperature < 0 Then temperature = 0
         If temperature > 2 Then temperature = 2
         If String.IsNullOrWhiteSpace(model) Then model = "qwen3:8b"
+        If http_port < 1 OrElse http_port > 65535 Then http_port = 8080
+        shutdown_token = If(shutdown_token, "").Trim()
 
         ' 解析数据目录（相对路径相对于配置文件所在目录），并确保目录存在
         Dim dir As String = data_dir
@@ -218,9 +240,95 @@ Public Class EmberConfig
             Call ini.WriteValue(SECTION_AGENT, NameOf(data_dir), "data", "运行时数据目录（人设/画像/对话历史），相对路径基于本配置文件所在目录")
             Call ini.WriteValue(SECTION_AGENT, NameOf(autosave), "true", "true 时每轮对话后自动保存；false 仅在退出或 /save 时保存")
 
+            Call ini.WriteValue(SECTION_WEB, NameOf(http_port), "8080", "--http 模式监听端口，命令行 --port 可覆盖")
+            Call ini.WriteValue(SECTION_WEB, NameOf(wwwroot), "", "Web 静态文件根目录；留空则自动探测（exe 同级 web 目录，或向上逐级查找名为 web 的目录）")
+            Call ini.WriteValue(SECTION_WEB, NameOf(shutdown_token), "", "远程关闭令牌：设置后可在 Web 界面输入该令牌远程安全关闭服务（自动保存数据后退出）；留空禁用远程关闭")
+
             Call ini.Flush()
         End Using
     End Sub
+
+    ' ==================== Web 静态目录解析 ====================
+
+    ''' <summary>
+    ''' 获取程序可执行文件所在目录（优先 <see cref="Environment.ProcessPath"/>，
+    ''' 不受运行期间工作目录切换影响）。
+    ''' </summary>
+    Public Shared Function GetExecutableDirectory() As String
+        Dim exePath As String = Nothing
+
+        Try
+            exePath = Environment.ProcessPath
+        Catch
+        End Try
+
+        If String.IsNullOrWhiteSpace(exePath) Then
+            exePath = Reflection.Assembly.GetEntryAssembly()?.Location
+        End If
+
+        If String.IsNullOrWhiteSpace(exePath) Then
+            exePath = AppDomain.CurrentDomain.BaseDirectory
+        End If
+
+        ' 若得到的是文件路径则取其目录，否则视为目录
+        If File.Exists(exePath) Then
+            Return Path.GetDirectoryName(Path.GetFullPath(exePath))
+        Else
+            Return Path.GetFullPath(exePath)
+        End If
+    End Function
+
+    ''' <summary>
+    ''' 解析 Web 静态文件根目录（三级优先：命令行 --wwwroot 覆盖 → ini [web] wwwroot 显式配置 → 自动探测）。
+    ''' 自动探测：exe 同级 web 目录 → 从 exe 目录向上逐级查找名为 web 的目录（最多 6 级，
+    ''' 开发环境可自动命中仓库根下的 web 文件夹）；均失败时回退 exe 同级 web 并提示。
+    ''' </summary>
+    ''' <param name="cliOverride">命令行 --wwwroot 参数值（空表示未指定）</param>
+    ''' <returns>解析出的 wwwroot 绝对路径（不校验存在性，由调用方提示）</returns>
+    Public Function ResolveWwwroot(Optional cliOverride As String = Nothing) As String
+        ' 1. 命令行覆盖优先
+        If Not String.IsNullOrWhiteSpace(cliOverride) Then
+            Return Path.GetFullPath(ResolveRelative(cliOverride.Trim()))
+        End If
+
+        ' 2. ini 显式配置
+        If Not String.IsNullOrWhiteSpace(wwwroot) Then
+            Return Path.GetFullPath(ResolveRelative(wwwroot.Trim()))
+        End If
+
+        ' 3. 自动探测
+        Dim exeDir As String = GetExecutableDirectory()
+
+        ' 3a. exe 同级 web
+        Dim candidate As String = Path.Combine(exeDir, "web")
+        If Directory.Exists(candidate) Then
+            Return candidate
+        End If
+
+        ' 3b. 从 exe 目录向上逐级查找名为 web 的目录（最多 6 级）
+        Dim dir As DirectoryInfo = New DirectoryInfo(exeDir)
+        For i As Integer = 1 To 6
+            If dir.Parent Is Nothing Then Exit For
+            dir = dir.Parent
+
+            candidate = Path.Combine(dir.FullName, "web")
+            If Directory.Exists(candidate) Then
+                Return candidate
+            End If
+        Next
+
+        ' 4. 均失败：回退 exe 同级 web（调用方负责提示目录不存在）
+        Return Path.Combine(exeDir, "web")
+    End Function
+
+    ''' <summary>相对路径基于 exe 所在目录解析为绝对路径。</summary>
+    Private Shared Function ResolveRelative(path As String) As String
+        If Path.IsPathRooted(path) Then
+            Return path
+        Else
+            Return Path.Combine(GetExecutableDirectory(), path)
+        End If
+    End Function
 
     Private Shared Function NormalizeProvider(value As String) As String
         If String.Equals(value, PROVIDER_OPENAI, StringComparison.OrdinalIgnoreCase) Then

@@ -1,4 +1,6 @@
 Imports System.Text
+Imports System.Threading
+Imports System.Threading.Tasks
 Imports Ollama
 
 ''' <summary>
@@ -9,6 +11,10 @@ Imports Ollama
 ''' 2. 画像总结客户端（preserveMemory:=False）：以一次性 prompt 方式调用 LLM，
 '''    定期从对话记忆中总结用户性格画像，不会污染主对话上下文。
 ''' 系统提示词 = Agent 人设 + 用户画像 + 语气适配指令，画像更新后下一轮对话即生效。
+'''
+''' 线程安全：CLI 模式下单线程访问；HTTP 模式下 Flute 使用 ThreadPool 多线程分发请求，
+''' 故所有读写操作（对话/人设/画像/保存/快照）均经 <see cref="_gate"/>（SemaphoreSlim）
+''' 串行化。VB 的 SyncLock 块内不允许 Await，因此采用可等待的信号量。
 ''' </summary>
 Public Class CompanionAgent : Implements IDisposable
 
@@ -26,6 +32,12 @@ Public Class CompanionAgent : Implements IDisposable
 
     ''' <summary>画像总结时用于长期记忆检索的最近用户消息条数</summary>
     Private Const RECALL_KEYWORD_MESSAGES As Integer = 3
+
+    ''' <summary>
+    ''' 并发互斥门（不可重入）：串行化对共享状态（记忆上下文/人设/画像/持久化）的全部访问。
+    ''' 公开方法拿锁后调用内部无锁核心方法（*Core*），避免重入死锁。
+    ''' </summary>
+    Private ReadOnly _gate As New SemaphoreSlim(1, 1)
 
     ReadOnly _config As EmberConfig
     ReadOnly _mainClient As LLMClient
@@ -45,21 +57,21 @@ Public Class CompanionAgent : Implements IDisposable
         End Get
     End Property
 
-    ''' <summary>当前 Agent 人设</summary>
+    ''' <summary>当前 Agent 人设（仅限单线程 CLI 模式直接读取；并发场景请用 <see cref="GetPersonaSnapshotAsync"/>）</summary>
     Public ReadOnly Property Persona As AgentPersona
         Get
             Return _persona
         End Get
     End Property
 
-    ''' <summary>当前用户性格画像</summary>
+    ''' <summary>当前用户性格画像（仅限单线程 CLI 模式直接读取；并发场景请用 <see cref="GetProfileSnapshotAsync"/>）</summary>
     Public ReadOnly Property Profile As UserProfile
         Get
             Return _profile
         End Get
     End Property
 
-    ''' <summary>累计用户对话轮次</summary>
+    ''' <summary>累计用户对话轮次（仅限单线程 CLI 模式直接读取；并发场景请用 <see cref="GetStatusSnapshotAsync"/>）</summary>
     Public ReadOnly Property UserTurnCount As Integer
         Get
             Return _userTurnCount
@@ -117,9 +129,9 @@ Public Class CompanionAgent : Implements IDisposable
 
     ''' <summary>
     ''' 重组系统提示词（人设 + 用户画像 + 语气适配指令）并应用到主对话客户端。
-    ''' 画像或人设更新后调用，下一轮对话立即生效。
+    ''' 画像或人设更新后调用，下一轮对话立即生效。（必须在持有 <see cref="_gate"/> 时调用）
     ''' </summary>
-    Public Sub RefreshSystemPrompt()
+    Private Sub RefreshSystemPrompt()
         _mainClient.system_message = BuildSystemPrompt()
     End Sub
 
@@ -153,51 +165,81 @@ Public Class CompanionAgent : Implements IDisposable
         Return sb.ToString().Trim()
     End Function
 
+    ' ==================== 对话（互斥） ====================
+
     ''' <summary>
-    ''' 与用户进行一轮对话：发送消息、流式输出回复、计数轮次、按配置自动保存，
+    ''' 与用户进行一轮对话（经 <see cref="_gate"/> 互斥）：发送消息、计数轮次、按配置自动保存，
     ''' 每达到 profile_interval 轮时自动触发一次用户画像总结并刷新系统提示词。
+    ''' LLM 流式增量由 LLMClient 内部直接 Console.Write（作为 CLI 输出或服务日志）。
     ''' </summary>
     ''' <param name="userInput">用户输入的文本</param>
-    ''' <returns>LLM 回复正文；网络持续失败等异常时返回空字符串并给出提示（不中断会话）</returns>
-    Public Async Function ChatAsync(userInput As String) As Task(Of String)
+    ''' <returns>结构化对话结果（正文/思考/轮次/成败与错误信息），失败时 success=False 不计入轮次</returns>
+    Public Async Function ChatCoreAsync(userInput As String) As Task(Of ChatResult)
+        Await _gate.WaitAsync()
+        Try
+            Return Await ChatCoreLockedAsync(userInput)
+        Finally
+            Call _gate.Release()
+        End Try
+    End Function
+
+    ''' <summary>对话核心逻辑（必须在持有 <see cref="_gate"/> 时调用）。</summary>
+    Private Async Function ChatCoreLockedAsync(userInput As String) As Task(Of ChatResult)
         Dim response As LLMsResponse = Nothing
 
         Try
-            ' LLMClient 内部已将 think/output 增量直接 Console.Write 流式输出，
-            ' 此处只需在回复结束后补一个换行分隔
             response = Await _mainClient.Chat(userInput)
             Call Console.WriteLine()
             Call Console.WriteLine()
         Catch ex As Exception
             Call Console.Error.WriteLine($"[对话失败] {ex.Message}")
             Call Console.Error.WriteLine("可以稍后重试，本轮对话未计入画像总结轮次。")
-            Return ""
+            Return New ChatResult With {
+                .success = False,
+                .errorMessage = ex.Message,
+                .turn = _userTurnCount
+            }
         End Try
 
         _userTurnCount += 1
 
         ' 每轮自动保存对话历史（情感对话数据珍贵，避免异常退出丢失）
         If _config.autosave Then
-            Call SaveAll()
+            Call SaveAllCore()
         End If
 
         ' 周期性总结用户画像并动态调整后续语气
         If _userTurnCount Mod _config.profile_interval = 0 Then
             Try
-                Await UpdateProfileAsync()
+                Call Await UpdateProfileCoreAsync()
             Catch ex As Exception
                 Call Console.Error.WriteLine($"[画像总结失败] {ex.Message}（不影响对话，下个周期重试）")
             End Try
         End If
 
-        Return If(response, New LLMsResponse).output
+        Return New ChatResult With {
+            .reply = If(response, New LLMsResponse).output,
+            .think = If(response, New LLMsResponse).think,
+            .turn = _userTurnCount,
+            .success = True
+        }
     End Function
 
     ''' <summary>
-    ''' 触发一次用户画像总结：输入 = 当前画像 + 最近对话窗口 + 长期记忆召回，
-    ''' 由独立总结客户端输出结构化 JSON 画像；解析成功则更新画像、刷新系统提示词并落盘。
+    ''' 触发一次用户画像总结（经 <see cref="_gate"/> 互斥）：输入 = 当前画像 + 最近对话窗口 + 长期记忆召回，
+    ''' 由独立总结客户端总结画像；解析成功则更新画像、刷新系统提示词并落盘。
     ''' </summary>
     Public Async Function UpdateProfileAsync() As Task(Of Boolean)
+        Await _gate.WaitAsync()
+        Try
+            Return Await UpdateProfileCoreAsync()
+        Finally
+            Call _gate.Release()
+        End Try
+    End Function
+
+    ''' <summary>画像总结核心逻辑（必须在持有 <see cref="_gate"/> 时调用）。</summary>
+    Private Async Function UpdateProfileCoreAsync() As Task(Of Boolean)
         ' 1. 取最近对话窗口
         Dim recent As List(Of ChatMessage) = TakeRecentMessages(_config.recent_window)
         If recent.Count = 0 Then
@@ -234,6 +276,7 @@ Public Class CompanionAgent : Implements IDisposable
 
     ''' <summary>
     ''' 从主对话上下文导出最近 N 条有效对话消息（仅 user/assistant，逐条截断防超长）。
+    ''' （必须在持有 <see cref="_gate"/> 时调用）
     ''' </summary>
     Private Function TakeRecentMessages(count As Integer) As List(Of ChatMessage)
         Dim messages As List(Of ChatMessage) = _mainClient.Context.ExportMessages()
@@ -255,6 +298,7 @@ Public Class CompanionAgent : Implements IDisposable
 
     ''' <summary>
     ''' 基于最近用户消息与画像关键词，从持久化全文索引中召回相关长期记忆。
+    ''' （必须在持有 <see cref="_gate"/> 时调用）
     ''' </summary>
     Private Function RecallLongTermMemory(recent As List(Of ChatMessage)) As ChatMessage()
         Try
@@ -277,6 +321,7 @@ Public Class CompanionAgent : Implements IDisposable
     ''' <summary>
     ''' 构造画像总结 prompt：当前画像 + 最近对话 + 召回的长期记忆 + 行文本输出格式要求。
     ''' 采用"键: 值"行文本格式而非 JSON——小模型对行格式的遵循度显著更高。
+    ''' （必须在持有 <see cref="_gate"/> 时调用）
     ''' </summary>
     Private Function BuildSummaryPrompt(recent As List(Of ChatMessage), recalled As ChatMessage()) As String
         Dim sb As New StringBuilder()
@@ -329,58 +374,161 @@ Public Class CompanionAgent : Implements IDisposable
     End Function
 
     ''' <summary>
-    ''' 生成开场问候语：临时借用无记忆的总结客户端（不污染主对话上下文与持久化记忆），
-    ''' 请求前后切换其系统提示词，生成结果仅打印给用户。
+    ''' 生成开场问候语（经 <see cref="_gate"/> 互斥）：临时借用无记忆的总结客户端
+    ''' （不污染主对话上下文与持久化记忆），请求前后切换其系统提示词，生成结果仅返回给调用方。
     ''' </summary>
     Public Async Function GreetAsync() As Task(Of String)
-        Dim savedSystem As String = _sumClient.system_message
-
-        _sumClient.system_message =
-            _persona.Description.Trim() & vbCrLf &
-            "请始终以这个人设的身份说话。"
-
+        Await _gate.WaitAsync()
         Try
-            Dim response As LLMsResponse = Await _sumClient.Chat(
-                "这是陪伴会话的开始。请以你的人设身份，用一两句自然、温暖的话向用户打招呼，" &
-                "开启今天的陪伴。只输出打招呼的内容本身，不要任何解释。")
-            Return If(response, New LLMsResponse).output
-        Catch ex As Exception
-            Call Console.Error.WriteLine($"[问候生成失败] {ex.Message}")
-            Return ""
+            Dim savedSystem As String = _sumClient.system_message
+
+            _sumClient.system_message =
+                _persona.Description.Trim() & vbCrLf &
+                "请始终以这个人设的身份说话。"
+
+            Try
+                Dim response As LLMsResponse = Await _sumClient.Chat(
+                    "这是陪伴会话的开始。请以你的人设身份，用一两句自然、温暖的话向用户打招呼，" &
+                    "开启今天的陪伴。只输出打招呼的内容本身，不要任何解释。")
+                Return If(response, New LLMsResponse).output
+            Catch ex As Exception
+                Call Console.Error.WriteLine($"[问候生成失败] {ex.Message}")
+                Return ""
+            Finally
+                _sumClient.system_message = savedSystem
+            End Try
         Finally
-            _sumClient.system_message = savedSystem
+            Call _gate.Release()
         End Try
     End Function
 
-    ' ==================== 用户命令支持 ====================
+    ' ==================== 人设（互斥） ====================
 
     ''' <summary>
-    ''' 设置/覆盖 Agent 人设（/persona set 命令后端）：即时生效并持久化。
+    ''' 设置/覆盖 Agent 人设（经 <see cref="_gate"/> 互斥）：即时生效并持久化。
     ''' </summary>
-    Public Sub SetPersona(description As String)
-        If _persona Is Nothing Then _persona = AgentPersona.CreateDefault()
-        _persona.Description = description.Trim()
-        _personaDirty = True
+    Public Async Function SetPersonaAsync(description As String) As Task
+        Await _gate.WaitAsync()
+        Try
+            If _persona Is Nothing Then _persona = AgentPersona.CreateDefault()
+            _persona.Description = description.Trim()
+            _personaDirty = True
 
-        Call RefreshSystemPrompt()
-        Call _persona.Save(_config.PersonaFilePath)
-        _personaDirty = False
-    End Sub
+            Call RefreshSystemPrompt()
+            Call _persona.Save(_config.PersonaFilePath)
+            _personaDirty = False
+        Finally
+            Call _gate.Release()
+        End Try
+    End Function
 
     ''' <summary>
-    ''' 重置为内置默认人设（/persona reset 命令后端）。
+    ''' 重置为内置默认人设（经 <see cref="_gate"/> 互斥）。
     ''' </summary>
-    Public Sub ResetPersona()
-        _persona = AgentPersona.CreateDefault()
-        _personaDirty = True
+    Public Async Function ResetPersonaAsync() As Task
+        Await _gate.WaitAsync()
+        Try
+            _persona = AgentPersona.CreateDefault()
+            _personaDirty = True
 
-        Call RefreshSystemPrompt()
-        Call _persona.Save(_config.PersonaFilePath)
-        _personaDirty = False
-    End Sub
+            Call RefreshSystemPrompt()
+            Call _persona.Save(_config.PersonaFilePath)
+            _personaDirty = False
+        Finally
+            Call _gate.Release()
+        End Try
+    End Function
+
+    ' ==================== 快照与历史（互斥只读，供 HTTP API 使用） ====================
 
     ''' <summary>
-    ''' 获取运行状态摘要（/status 命令后端）。
+    ''' 获取运行状态快照（经 <see cref="_gate"/> 互斥）。
+    ''' </summary>
+    Public Async Function GetStatusSnapshotAsync() As Task(Of AgentStatusSnapshot)
+        Await _gate.WaitAsync()
+        Try
+            Return New AgentStatusSnapshot With {
+                .backend = _config.DescribeEndpoint(),
+                .model = _config.model,
+                .turns = _userTurnCount,
+                .tokens = CInt(_mainClient.Context.EstimatedTokens),
+                .maxTokens = _config.max_context_tokens,
+                .personaName = _persona.Name,
+                .personaIsDefault = _persona.IsDefault,
+                .profileUpdated = If(_profile.IsEmpty, "", _profile.UpdatedAt),
+                .autosave = _config.autosave,
+                .dataDir = _config.DataDirectory,
+                .remoteShutdownEnabled = Not String.IsNullOrWhiteSpace(_config.shutdown_token)
+            }
+        Finally
+            Call _gate.Release()
+        End Try
+    End Function
+
+    ''' <summary>
+    ''' 获取 Agent 人设快照（经 <see cref="_gate"/> 互斥）。
+    ''' </summary>
+    Public Async Function GetPersonaSnapshotAsync() As Task(Of PersonaSnapshot)
+        Await _gate.WaitAsync()
+        Try
+            Return New PersonaSnapshot With {
+                .name = _persona.Name,
+                .description = _persona.Description,
+                .isDefault = _persona.IsDefault,
+                .updatedAt = _persona.UpdatedAt
+            }
+        Finally
+            Call _gate.Release()
+        End Try
+    End Function
+
+    ''' <summary>
+    ''' 获取用户画像快照（经 <see cref="_gate"/> 互斥）。
+    ''' </summary>
+    Public Async Function GetProfileSnapshotAsync() As Task(Of ProfileSnapshot)
+        Await _gate.WaitAsync()
+        Try
+            Return New ProfileSnapshot With {
+                .summary = _profile.Summary,
+                .traits = If(_profile.Traits, New List(Of String)),
+                .interests = If(_profile.Interests, New List(Of String)),
+                .emotionalState = _profile.EmotionalState,
+                .communicationStyle = _profile.CommunicationStyle,
+                .updatedAt = _profile.UpdatedAt,
+                .isEmpty = _profile.IsEmpty
+            }
+        Finally
+            Call _gate.Release()
+        End Try
+    End Function
+
+    ''' <summary>
+    ''' 获取最近的历史对话消息快照（经 <see cref="_gate"/> 互斥）。
+    ''' </summary>
+    ''' <param name="limit">最多返回的消息条数（1~500，非法值回退 50）</param>
+    Public Async Function GetRecentHistoryAsync(Optional limit As Integer = 50) As Task(Of HistorySnapshot)
+        Await _gate.WaitAsync()
+        Try
+            If limit < 1 OrElse limit > 500 Then limit = 50
+
+            Dim snapshot As New HistorySnapshot With {.messages = New List(Of HistoryMessage)}
+            Dim messages As List(Of ChatMessage) = TakeRecentMessages(limit)
+
+            For Each msg In messages
+                Call snapshot.messages.Add(New HistoryMessage With {
+                    .role = msg.Role,
+                    .content = msg.Content
+                })
+            Next
+
+            Return snapshot
+        Finally
+            Call _gate.Release()
+        End Try
+    End Function
+
+    ''' <summary>
+    ''' 获取运行状态摘要文本（/status CLI 命令用；单线程 CLI 场景安全，HTTP 场景请用快照方法）。
     ''' </summary>
     Public Function GetStatusText() As String
         Dim sb As New StringBuilder()
@@ -398,12 +546,22 @@ Public Class CompanionAgent : Implements IDisposable
         Return sb.ToString().Trim()
     End Function
 
-    ' ==================== 持久化 ====================
+    ' ==================== 持久化（互斥） ====================
 
     ''' <summary>
-    ''' 保存全部持久化数据：对话历史（含全文索引重建）、人设与用户画像。
+    ''' 保存全部持久化数据（经 <see cref="_gate"/> 互斥）：对话历史（含全文索引重建）、人设与用户画像。
     ''' </summary>
-    Public Sub SaveAll()
+    Public Async Function SaveAllAsync() As Task
+        Await _gate.WaitAsync()
+        Try
+            Call SaveAllCore()
+        Finally
+            Call _gate.Release()
+        End Try
+    End Function
+
+    ''' <summary>保存核心逻辑（必须在持有 <see cref="_gate"/> 时调用）。</summary>
+    Private Sub SaveAllCore()
         Call _storage.Save()
         If _personaDirty Then
             If _persona.Save(_config.PersonaFilePath) Then _personaDirty = False
@@ -421,7 +579,9 @@ Public Class CompanionAgent : Implements IDisposable
         If Not disposedValue Then
             If disposing Then
                 Try
-                    Call SaveAll()
+                    ' Dispose 阶段外部已确认无并发请求（HTTP Shutdown 已等待在途 worker 结束），
+                    ' 直接调用无锁核心保存即可
+                    Call SaveAllCore()
                 Catch ex As Exception
                     Call Console.Error.WriteLine($"[退出保存失败] {ex.Message}")
                 Finally
@@ -439,4 +599,66 @@ Public Class CompanionAgent : Implements IDisposable
         Call Dispose(True)
         GC.SuppressFinalize(Me)
     End Sub
+End Class
+
+' ==================== HTTP API 用的 DTO 类型（公共属性，属性名即 JSON 字段名） ====================
+
+''' <summary>一轮对话的结构化结果（POST /api/chat 响应体）。</summary>
+Public Class ChatResult
+    ''' <summary>LLM 回复正文</summary>
+    Public Property reply As String = ""
+    ''' <summary>LLM 思考过程文本（可能为空）</summary>
+    Public Property think As String = ""
+    ''' <summary>本轮完成后的累计对话轮次</summary>
+    Public Property turn As Integer
+    ''' <summary>本轮对话是否成功</summary>
+    Public Property success As Boolean
+    ''' <summary>失败时的错误信息</summary>
+    Public Property errorMessage As String = ""
+End Class
+
+''' <summary>运行状态快照（GET /api/status 响应体）。</summary>
+Public Class AgentStatusSnapshot
+    Public Property backend As String = ""
+    Public Property model As String = ""
+    Public Property turns As Integer
+    Public Property tokens As Integer
+    Public Property maxTokens As Integer
+    Public Property personaName As String = ""
+    Public Property personaIsDefault As Boolean
+    Public Property profileUpdated As String = ""
+    Public Property autosave As Boolean
+    Public Property dataDir As String = ""
+    ''' <summary>是否已配置远程关闭 token（不泄露 token 明文，前端据此决定是否显示关闭按钮）</summary>
+    Public Property remoteShutdownEnabled As Boolean
+End Class
+
+''' <summary>Agent 人设快照（GET /api/persona 响应体）。</summary>
+Public Class PersonaSnapshot
+    Public Property name As String = ""
+    Public Property description As String = ""
+    Public Property isDefault As Boolean
+    Public Property updatedAt As String = ""
+End Class
+
+''' <summary>用户画像快照（GET /api/profile 响应体）。</summary>
+Public Class ProfileSnapshot
+    Public Property summary As String = ""
+    Public Property traits As New List(Of String)
+    Public Property interests As New List(Of String)
+    Public Property emotionalState As String = ""
+    Public Property communicationStyle As String = ""
+    Public Property updatedAt As String = ""
+    Public Property isEmpty As Boolean
+End Class
+
+''' <summary>历史消息集合（GET /api/history 响应体）。</summary>
+Public Class HistorySnapshot
+    Public Property messages As New List(Of HistoryMessage)
+End Class
+
+''' <summary>单条历史消息。</summary>
+Public Class HistoryMessage
+    Public Property role As String = ""
+    Public Property content As String = ""
 End Class
