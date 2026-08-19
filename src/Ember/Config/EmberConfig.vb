@@ -1,6 +1,7 @@
 Imports System
 Imports System.Globalization
 Imports System.IO
+Imports Microsoft.VisualBasic.ComponentModel.Ranges.Unit
 Imports Microsoft.VisualBasic.ComponentModel.Settings.Inf
 Imports Ollama
 
@@ -49,7 +50,7 @@ Public Class EmberConfig
     Public Property recent_window As Integer = 20
 
     ''' <summary>对话上下文最大 token 估算上限，超过后自动从最旧端裁剪（被裁剪内容仍保留在持久化文件与检索索引中）</summary>
-    Public Property max_context_tokens As Integer = 1000000
+    Public Property max_context_tokens As Integer = 128 * ByteSize.KB
 
     ''' <summary>运行时数据目录（相对路径时相对于配置文件所在目录解析）</summary>
     Public Property data_dir As String = "data"

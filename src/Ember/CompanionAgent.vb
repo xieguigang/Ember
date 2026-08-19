@@ -389,7 +389,7 @@ Public Class CompanionAgent : Implements IDisposable
         Call sb.AppendLine($"温度: {_mainClient.temperature}")
         Call sb.AppendLine($"对话轮次: {_userTurnCount}")
         Call sb.AppendLine($"上下文消息数: {_mainClient.Context.Count}")
-        Call sb.AppendLine($"上下文 token 估算: {_mainClient.Context.EstimatedTokens} / {_config.max_context_tokens}")
+        Call sb.AppendLine($"上下文 token 估算: {StringFormats.Lanudry(_mainClient.Context.EstimatedTokens)} / {StringFormats.Lanudry(_config.max_context_tokens)}")
         Call sb.AppendLine($"人设: {_persona.Name}{If(_persona.IsDefault, "（默认）", "（自定义）")}")
         Call sb.AppendLine($"用户画像: {If(_profile.IsEmpty, "（尚未总结）", $"已更新于 {_profile.UpdatedAt}")}")
         Call sb.AppendLine($"自动保存: {If(_config.autosave, "每轮", "仅退出/手动")}")
