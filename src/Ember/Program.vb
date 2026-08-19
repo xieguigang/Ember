@@ -13,6 +13,9 @@ Module Program
     ''' <summary>Ctrl+C 退出标志（事件回调置位，主循环检测后统一保存退出）</summary>
     Dim _cancelled As Boolean = False
 
+    ''' <summary>需要从输入中清理的零宽字符（管道/重定向输入可能携带的 BOM 等）</summary>
+    ReadOnly _zeroWidthChars As Char() = {ChrW(&HFEFF), ChrW(&H200B), ChrW(&H200C), ChrW(&H200D)}
+
     Function Main(args As String()) As Integer
         ' Ctrl+C 安全退出：阻止进程被直接终止，改由主循环统一落盘后正常退出
         AddHandler Console.CancelKeyPress,
@@ -67,7 +70,8 @@ Module Program
             If _cancelled Then Exit While
             If input Is Nothing Then Exit While   ' 输入流被关闭（重定向结束等）
 
-            input = input.Trim()
+            ' 清理 BOM 等零宽字符（管道/重定向输入场景），再去除首尾空白
+            input = input.Trim().Trim(_zeroWidthChars).Trim()
             If input.Length = 0 Then Continue While
 
             If input.StartsWith("/") Then
