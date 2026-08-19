@@ -1,8 +1,6 @@
-Imports System
-Imports System.Collections.Generic
 Imports System.IO
-Imports System.Linq
 Imports Microsoft.VisualBasic.Serialization.JSON
+Imports Ollama
 
 ''' <summary>
 ''' 用户性格画像模型：由总结客户端根据对话记忆持续提炼的用户特征快照。
@@ -106,24 +104,17 @@ Public Class UserProfile
         End If
 
         ' 剥离 markdown 代码块包裹（```json ... ```）
-        Dim text As String = llmOutput.Trim()
-        If text.StartsWith("```") Then
-            Dim firstLineEnd As Integer = text.IndexOf(vbLf)
-            If firstLineEnd > 0 Then text = text.Substring(firstLineEnd + 1)
-            Dim fenceEnd As Integer = text.LastIndexOf("```", StringComparison.Ordinal)
-            If fenceEnd >= 0 Then text = text.Substring(0, fenceEnd)
-            text = text.Trim()
-        End If
+        Dim json_str As String = LLMsResponse.ExtractJsonFromResponse(llmOutput)
 
         ' 含 "{" 时优先按 JSON 解析；失败再回退行文本（容忍混杂输出）
-        If text.Contains("{"c) Then
-            Dim byJson As UserProfile = TryParseJson(text)
+        If json_str.Contains("{"c) Then
+            Dim byJson As UserProfile = TryParseJson(json_str)
             If byJson IsNot Nothing Then
                 Return byJson
             End If
         End If
 
-        Return TryParseLines(text)
+        Return TryParseLines(json_str)
     End Function
 
     ''' <summary>

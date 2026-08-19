@@ -1,7 +1,4 @@
-Imports System
 Imports System.Text
-Imports System.Threading
-Imports System.Threading.Tasks
 
 ''' <summary>
 ''' Ember 情感陪伴智能体命令行程序入口。

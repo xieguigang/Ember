@@ -164,17 +164,17 @@ Public Class EmberConfig
     Private Sub ReadFromIni()
         Using ini As New IniFile(IniFilePath)
             provider = NormalizeProvider(ini.ReadValue(SECTION_LLM, NameOf(provider), provider))
-            server = ReadString(ini, SECTION_LLM, NameOf(server), server)
-            model = ReadString(ini, SECTION_LLM, NameOf(model), model)
-            api_base = ReadString(ini, SECTION_LLM, NameOf(api_base), api_base)
-            api_key = ReadString(ini, SECTION_LLM, NameOf(api_key), api_key)
-            temperature = ReadDouble(ini, SECTION_LLM, NameOf(temperature), temperature)
+            server = ini.ReadString(SECTION_LLM, NameOf(server), server)
+            model = ini.ReadString(SECTION_LLM, NameOf(model), model)
+            api_base = ini.ReadString(SECTION_LLM, NameOf(api_base), api_base)
+            api_key = ini.ReadString(SECTION_LLM, NameOf(api_key), api_key)
+            temperature = ini.ReadDouble(SECTION_LLM, NameOf(temperature), temperature)
 
-            profile_interval = ReadInt32(ini, SECTION_AGENT, NameOf(profile_interval), profile_interval)
-            recent_window = ReadInt32(ini, SECTION_AGENT, NameOf(recent_window), recent_window)
-            max_context_tokens = ReadInt32(ini, SECTION_AGENT, NameOf(max_context_tokens), max_context_tokens)
-            data_dir = ReadString(ini, SECTION_AGENT, NameOf(data_dir), data_dir)
-            autosave = ReadBoolean(ini, SECTION_AGENT, NameOf(autosave), autosave)
+            profile_interval = ini.ReadInt32(SECTION_AGENT, NameOf(profile_interval), profile_interval)
+            recent_window = ini.ReadInt32(SECTION_AGENT, NameOf(recent_window), recent_window)
+            max_context_tokens = ini.ReadInt32(SECTION_AGENT, NameOf(max_context_tokens), max_context_tokens)
+            data_dir = ini.ReadString(SECTION_AGENT, NameOf(data_dir), data_dir)
+            autosave = ini.ReadBoolean(SECTION_AGENT, NameOf(autosave), autosave)
         End Using
 
         ' 数值参数合法性保护
@@ -226,45 +226,6 @@ Public Class EmberConfig
             Return PROVIDER_OPENAI
         Else
             Return PROVIDER_OLLAMA
-        End If
-    End Function
-
-    Private Shared Function ReadString(ini As IniFile, section As String, key As String, defaultVal As String) As String
-        Dim s As String = ini.ReadValue(section, key)
-        If String.IsNullOrWhiteSpace(s) Then
-            Return defaultVal
-        Else
-            Return s.Trim()
-        End If
-    End Function
-
-    Private Shared Function ReadInt32(ini As IniFile, section As String, key As String, defaultVal As Integer) As Integer
-        Dim s As String = ini.ReadValue(section, key)
-        Dim v As Integer
-        If Not String.IsNullOrEmpty(s) AndAlso Integer.TryParse(s.Trim(), v) Then
-            Return v
-        Else
-            Return defaultVal
-        End If
-    End Function
-
-    Private Shared Function ReadDouble(ini As IniFile, section As String, key As String, defaultVal As Double) As Double
-        Dim s As String = ini.ReadValue(section, key)
-        Dim v As Double
-        If Not String.IsNullOrEmpty(s) AndAlso Double.TryParse(s.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, v) Then
-            Return v
-        Else
-            Return defaultVal
-        End If
-    End Function
-
-    Private Shared Function ReadBoolean(ini As IniFile, section As String, key As String, defaultVal As Boolean) As Boolean
-        Dim s As String = ini.ReadValue(section, key)
-        Dim v As Boolean
-        If Not String.IsNullOrEmpty(s) AndAlso Boolean.TryParse(s.Trim(), v) Then
-            Return v
-        Else
-            Return defaultVal
         End If
     End Function
 End Class
