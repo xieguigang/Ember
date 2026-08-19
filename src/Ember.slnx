@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/framework/">
+    <Project Path="../../GCModeller/src/runtime/sciBASIC#/Microsoft.VisualBasic.Core/src/Core.vbproj" />
+    <Project Path="../../GCModeller/src/runtime/sciBASIC#/mime/application%json/JSON-netcore5.vbproj" />
+    <Project Path="../../GCModeller/src/runtime/sciBASIC#/mime/text%yaml/text.yaml.vbproj" />
+  </Folder>
+  <Project Path="../../LLMs/src/Ollama/Ollama.vbproj" />
+  <Project Path="Ember/Ember.vbproj" />
+</Solution>
