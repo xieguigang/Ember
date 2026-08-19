@@ -216,6 +216,71 @@ Namespace Web
             End Try
         End Sub
 
+        ' ==================== 每日日记 ====================
+
+        ''' <summary>
+        ''' 日记列表（按日期倒序，仅摘要不含正文）。
+        ''' </summary>
+        <HttpGet("/api/diary/list")>
+        Public Sub ListDiaries(request As HttpRequest, response As HttpResponse)
+            Try
+                Call AllowCors(response)
+                Dim diaries As List(Of DiaryEntry) = _agent.ListDiariesAsync().GetAwaiter().GetResult()
+                Dim result As New DiaryListResult With {.diaries = diaries}
+                Call response.WriteJSON(Envelope(result))
+            Catch ex As Exception
+                Call Fail(response, ex)
+            End Try
+        End Sub
+
+        ''' <summary>
+        ''' 读取指定日期的日记（query 参数 date=yyyy-MM-dd，缺省今日）。
+        ''' </summary>
+        <HttpGet("/api/diary")>
+        Public Sub GetDiary(request As HttpRequest, response As HttpResponse)
+            Try
+                Call AllowCors(response)
+
+                Dim [date] As String = ""
+                If request.URL.query.ContainsKey("date") Then
+                    [date] = request.URL.query("date").ElementAtOrNull(Scan0)
+                End If
+
+                Dim entry As DiaryEntry = _agent.GetDiaryAsync([date]).GetAwaiter().GetResult()
+                Dim result As New DiaryResult With {
+                    .exists = entry IsNot Nothing,
+                    .[date] = If(entry?.[date], If([date], "")),
+                    .title = If(entry?.title, ""),
+                    .content = If(entry?.content, ""),
+                    .generatedAt = If(entry?.generatedAt, "")
+                }
+                Call response.WriteJSON(Envelope(result))
+            Catch ex As Exception
+                Call Fail(response, ex)
+            End Try
+        End Sub
+
+        ''' <summary>
+        ''' 手动生成/重写今日日记（同步等待完成）。
+        ''' </summary>
+        <HttpPost("/api/diary/generate")>
+        Public Sub GenerateDiary(request As HttpRequest, response As HttpResponse)
+            Try
+                Call AllowCors(response)
+
+                Dim entry As DiaryEntry = _agent.WriteDiaryAsync().GetAwaiter().GetResult()
+                If entry Is Nothing Then
+                    Call response.WriteJSON(Envelope(New DiaryGenerateResult With {
+                        .ok = False, .[date] = Date.Today.ToString("yyyy-MM-dd")}, 400))
+                Else
+                    Call response.WriteJSON(Envelope(New DiaryGenerateResult With {
+                        .ok = True, .[date] = entry.[date]}))
+                End If
+            Catch ex As Exception
+                Call Fail(response, ex)
+            End Try
+        End Sub
+
         ' ==================== 持久化 ====================
 
         <HttpPost("/api/save")>

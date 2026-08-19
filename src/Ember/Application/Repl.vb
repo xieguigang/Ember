@@ -107,6 +107,9 @@ Namespace Application
                 Case "/persona"
                     Await HandlePersonaCommandAsync(agent, arg)
 
+                Case "/diary"
+                    Await HandleDiaryCommandAsync(agent, arg)
+
                 Case Else
                     Call Console.WriteLine($"未知命令 {cmd}，输入 /help 查看可用命令。")
                     Call Console.WriteLine()
@@ -148,6 +151,73 @@ Namespace Application
 
             Call Console.WriteLine()
         End Function
+
+        ''' <summary>
+        ''' 处理 /diary 子命令：默认看今日 / gen 生成 / list 列表 / show yyyy-MM-dd 查看。
+        ''' </summary>
+        Private Async Function HandleDiaryCommandAsync(agent As CompanionAgent, arg As String) As Task
+            Dim parts As String() = arg.Split(" "c, 2)
+            Dim [sub] As String = If(parts.Length > 0, parts(0).ToLowerInvariant(), "")
+            Dim subArg As String = If(parts.Length > 1, parts(1).Trim(), "")
+
+            Select Case [sub]
+                Case ""
+                    ' 查看今日日记
+                    Dim today As DiaryEntry = Await agent.GetDiaryAsync()
+                    If today Is Nothing Then
+                        Call Console.WriteLine("[系统] 今天还没有日记。聊过几句后我会自动写一篇，或用 /diary gen 手动生成。")
+                    Else
+                        Call PrintDiary(today)
+                    End If
+
+                Case "gen", "write"
+                    Call Console.WriteLine("[系统] 正在整理今天的对话写日记…")
+                    Dim entry As DiaryEntry = Await agent.WriteDiaryAsync()
+                    If entry Is Nothing Then
+                        Call Console.WriteLine("[系统] 今天的日记没写成（可能今天还没有对话内容）。")
+                    Else
+                        Call PrintDiary(entry)
+                    End If
+
+                Case "list"
+                    Dim diaries As List(Of DiaryEntry) = Await agent.ListDiariesAsync()
+                    If diaries.Count = 0 Then
+                        Call Console.WriteLine("[系统] 还没有任何日记。")
+                    Else
+                        Call Console.WriteLine($"共 {diaries.Count} 篇日记（最新在前）：")
+                        For Each d As DiaryEntry In diaries
+                            Call Console.WriteLine($"  {d.[date]}  《{d.title}》")
+                        Next
+                    End If
+
+                Case "show"
+                    If subArg.Length = 0 Then
+                        Call Console.WriteLine("用法：/diary show yyyy-MM-dd（日期可用 /diary list 查询）")
+                    Else
+                        Dim entry As DiaryEntry = Await agent.GetDiaryAsync(subArg)
+                        If entry Is Nothing Then
+                            Call Console.WriteLine($"[系统] {subArg} 没有日记。")
+                        Else
+                            Call PrintDiary(entry)
+                        End If
+                    End If
+
+                Case Else
+                    Call Console.WriteLine("用法：/diary [查看今日] | /diary gen [生成今日] | /diary list | /diary show yyyy-MM-dd")
+            End Select
+
+            Call Console.WriteLine()
+        End Function
+
+        ''' <summary>打印一篇日记。</summary>
+        Private Sub PrintDiary(entry As DiaryEntry)
+            Call Console.WriteLine("--------------------------------------------------")
+            Call Console.WriteLine($"📔 {entry.[date]} 《{entry.title}》")
+            Call Console.WriteLine($"   （写于 {entry.generatedAt}）")
+            Call Console.WriteLine("--------------------------------------------------")
+            Call Console.WriteLine(entry.content)
+            Call Console.WriteLine("--------------------------------------------------")
+        End Sub
 
         ''' <summary>
         ''' 打印当前用户性格画像（/profile 命令）。
@@ -195,6 +265,7 @@ Namespace Application
             Call Console.WriteLine("  /persona show         查看当前人设")
             Call Console.WriteLine("  /persona reset        恢复默认人设")
             Call Console.WriteLine("  /profile              查看我对你的性格画像总结")
+            Call Console.WriteLine("  /diary                查看今天的日记（gen 生成/重写，list 全部，show 日期）")
             Call Console.WriteLine("  /status               查看运行状态")
             Call Console.WriteLine("  /save                 立即保存全部记忆")
             Call Console.WriteLine()

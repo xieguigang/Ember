@@ -432,7 +432,7 @@ Public Class CompanionAgent : Implements IDisposable
             Dim prompt As New StringBuilder()
             Call prompt.AppendLine("以下是今天你和用户之间的全部对话记录（user 是用户，assistant 是你）。")
             Call prompt.AppendLine("请以你的身份写一篇今天的日记，要求：")
-            Call prompt.AppendLine("1. 第一行是日记标题（不要带引号、不要"标题："前缀、不要 markdown 记号），简洁而有温度；")
+            Call prompt.AppendLine("1. 第一行是日记标题（不要带引号、不要『标题：』前缀、不要 markdown 记号），简洁而有温度；")
             Call prompt.AppendLine("2. 从第二行起是正文：用第一人称回顾今天你们聊了什么、用户的情绪与状态、")
             Call prompt.AppendLine("   值得纪念的瞬间以及你自己的感受，语气自然真诚，200~400 字；")
             Call prompt.AppendLine("3. 只输出标题和正文，不要任何其他解释。")
@@ -449,7 +449,8 @@ Public Class CompanionAgent : Implements IDisposable
             Dim response As LLMsResponse = Await _sumClient.Chat(prompt.ToString())
 
             ' 4. 解析：首行标题（容错剥离前缀记号），其余为正文
-            Dim text As String = (If(response, New LLMsResponse).output ?? "").Trim()
+            Dim rawOutput As String = If(response, New LLMsResponse).output
+            Dim text As String = If(rawOutput, "").Trim()
             Dim lines As String() = text.Split({vbCrLf, vbLf, vbCr}, StringSplitOptions.RemoveEmptyEntries)
 
             If lines.Length = 0 OrElse String.IsNullOrWhiteSpace(text) Then

@@ -44,13 +44,13 @@ Public Module DiaryStore
     ''' 加载指定日期的日记；文件不存在或损坏时返回 Nothing。
     ''' </summary>
     Public Function Load(diaryDir As String, [date] As String) As DiaryEntry
-        Dim file As String = GetFilePath(diaryDir, [date])
-        If Not File.Exists(file) Then
+        Dim filePath As String = GetFilePath(diaryDir, [date])
+        If Not File.Exists(filePath) Then
             Return Nothing
         End If
 
         Try
-            Dim entry As DiaryEntry = LoadJsonFile(Of DiaryEntry)(file:=file, simpleDict:=True)
+            Dim entry As DiaryEntry = LoadJsonFile(Of DiaryEntry)(file:=filePath, simpleDict:=True)
             If entry Is Nothing OrElse String.IsNullOrWhiteSpace(entry.content) Then
                 Return Nothing
             End If
