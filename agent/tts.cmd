@@ -1,6 +1,10 @@
 @echo off
 
-F:
-cd F:\GPT-SoVITS-v2pro-20250604
+set home=F:\GPT-SoVITS-v2pro-20250604
+set ref_text="在基欧分类系统中，有三大基础分类。官方的称呼应该叫做词条的命名空间。"
+set ref_voice=reference_voice\1\section4-7.wav
 
-".\runtime\python" api.py -dr "F:\GPT-SoVITS-v2pro-20250604\reference_voice\1\section4-7.wav" -dt "在基欧分类系统中，有三大基础分类。官方的称呼应该叫做词条的命名空间。" -dl "zh"
+F:
+cd %home%
+
+".\runtime\python" api.py -dr "%home%\%ref_voice%" -dt %ref_text% -dl "zh"
