@@ -78,7 +78,7 @@ Module Program
             Else
                 ' 普通对话：交由智能体处理（内部含流式输出、轮次计数、
                 ' 自动保存与周期性画像总结）
-                Call Await agent.ChatAsync(input)
+                Await agent.ChatAsync(input)
             End If
         End While
 

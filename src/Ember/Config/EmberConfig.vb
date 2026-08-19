@@ -2,6 +2,7 @@ Imports System
 Imports System.Globalization
 Imports System.IO
 Imports Microsoft.VisualBasic.ComponentModel.Settings.Inf
+Imports Ollama
 
 ''' <summary>
 ''' Ember 情感陪伴智能体配置模型。
@@ -61,8 +62,14 @@ Public Class EmberConfig
     ''' <summary>配置文件绝对路径</summary>
     Public ReadOnly Property IniFilePath As String
 
+    Dim _dataDirectory As String = ""
+
     ''' <summary>运行时数据目录（绝对路径，已确保创建）</summary>
     Public ReadOnly Property DataDirectory As String
+        Get
+            Return _dataDirectory
+        End Get
+    End Property
 
     ''' <summary>Agent 人设持久化文件（JSON）</summary>
     Public ReadOnly Property PersonaFilePath As String
@@ -186,8 +193,8 @@ Public Class EmberConfig
             dir = Path.Combine(Path.GetDirectoryName(IniFilePath), dir)
         End If
 
-        DataDirectory = Path.GetFullPath(dir)
-        Call Directory.CreateDirectory(DataDirectory)
+        _dataDirectory = Path.GetFullPath(dir)
+        Call Directory.CreateDirectory(_dataDirectory)
     End Sub
 
     ''' <summary>生成带注释的默认配置文件（目录不存在时自动创建）。</summary>
