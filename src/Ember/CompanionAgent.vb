@@ -50,6 +50,53 @@ Public Class CompanionAgent : Implements IDisposable
     Dim _profileDirty As Boolean
     Dim _userTurnCount As Integer
 
+    ' ==================== 实时对话流状态（供 Web 前端轮询） ====================
+
+    ''' <summary>实时状态轻量锁：仅保护 _live* 字段的读写（不与 _gate 互斥，轮询永不阻塞对话）</summary>
+    Private ReadOnly _liveSync As New Object()
+
+    Dim _liveActive As Boolean          ' 是否有对话正在进行
+    Dim _livePhase As String = "idle"   ' idle | thinking | replying
+    Dim _liveThink As String = ""       ' 思考过程累计文本
+    Dim _liveOutput As String = ""      ' 回复正文累计文本
+    Dim _liveTurn As Integer            ' 进行中对话完成时的轮次
+
+    ''' <summary>
+    ''' 重置并标记实时流开始（在持有 _gate 时调用；_liveSync 内部短锁保护）。
+    ''' </summary>
+    Private Sub LiveBegin()
+        SyncLock _liveSync
+            _liveActive = True
+            _livePhase = "thinking"
+            _liveThink = ""
+            _liveOutput = ""
+            _liveTurn = _userTurnCount + 1
+        End SyncLock
+    End Sub
+
+    ''' <summary>标记实时流结束（在持有 _gate 时调用）。</summary>
+    Private Sub LiveEnd()
+        SyncLock _liveSync
+            _liveActive = False
+            _livePhase = "idle"
+        End SyncLock
+    End Sub
+
+    ''' <summary>
+    ''' 获取当前进行中对话的实时快照（不进入 _gate 互斥门，供 /api/chat/live 高频轮询）。
+    ''' </summary>
+    Public Function GetLiveChatSnapshot() As LiveChatSnapshot
+        SyncLock _liveSync
+            Return New LiveChatSnapshot With {
+                .active = _liveActive,
+                .phase = _livePhase,
+                .think = _liveThink,
+                .output = _liveOutput,
+                .turn = _liveTurn
+            }
+        End SyncLock
+    End Function
+
     ''' <summary>主对话客户端（暴露用于状态展示等只读用途）</summary>
     Public ReadOnly Property MainClient As LLMClient
         Get
@@ -187,6 +234,22 @@ Public Class CompanionAgent : Implements IDisposable
     Private Async Function ChatCoreLockedAsync(userInput As String) As Task(Of ChatResult)
         Dim response As LLMsResponse = Nothing
 
+        ' 注册流式钩子：思考/正文 token 实时写入 _live* 缓冲供 Web 前端轮询
+        '（CLI 模式下无人轮询，回调仅累计字符串，开销可忽略）
+        Call LiveBegin()
+        Call _mainClient.HookResponseStream(
+            Sub(outputToken)
+                SyncLock _liveSync
+                    If _livePhase = "thinking" Then _livePhase = "replying"
+                    _liveOutput &= outputToken
+                End SyncLock
+            End Sub,
+            Sub(thinkToken)
+                SyncLock _liveSync
+                    If _livePhase = "thinking" Then _liveThink &= thinkToken
+                End SyncLock
+            End Sub)
+
         Try
             response = Await _mainClient.Chat(userInput)
             Call Console.WriteLine()
@@ -199,6 +262,10 @@ Public Class CompanionAgent : Implements IDisposable
                 .errorMessage = ex.Message,
                 .turn = _userTurnCount
             }
+        Finally
+            ' 无论成败都解除钩子并结束实时流（快照保留最终内容供最后的轮询读取）
+            Call _mainClient.HookResponseStream(Nothing, Nothing)
+            Call LiveEnd()
         End Try
 
         _userTurnCount += 1
@@ -661,4 +728,16 @@ End Class
 Public Class HistoryMessage
     Public Property role As String = ""
     Public Property content As String = ""
+End Class
+
+''' <summary>
+''' 进行中对话的实时流快照（GET /api/chat/live 响应体）。
+''' phase: idle=无对话；thinking=模型思考中；replying=回复生成中。
+''' </summary>
+Public Class LiveChatSnapshot
+    Public Property active As Boolean
+    Public Property phase As String = "idle"
+    Public Property think As String = ""
+    Public Property output As String = ""
+    Public Property turn As Integer
 End Class

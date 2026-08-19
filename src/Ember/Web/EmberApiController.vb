@@ -141,13 +141,28 @@ Namespace Web
 
                 If Not result.success Then
                     Call response.WriteJSON(Envelope(New ChatResult With {
-                    .success = False,
-                    .errorMessage = result.errorMessage,
-                    .turn = result.turn
-                }, 500))
+                        .success = False,
+                        .errorMessage = result.errorMessage,
+                        .turn = result.turn
+                    }, 500))
                 Else
                     Call response.WriteJSON(Envelope(result))
                 End If
+            Catch ex As Exception
+                Call Fail(response, ex)
+            End Try
+        End Sub
+
+        ''' <summary>
+        ''' 进行中对话的实时流快照：前端在 POST /api/chat 期间高频轮询本端点，
+        ''' 实时渲染思考过程与增量回复。只读轻量锁快照，不进入互斥门，永不阻塞对话。
+        ''' </summary>
+        <HttpGet("/api/chat/live")>
+        Public Sub GetLiveChat(request As HttpRequest, response As HttpResponse)
+            Try
+                Call AllowCors(response)
+                Dim snapshot As LiveChatSnapshot = _agent.GetLiveChatSnapshot()
+                Call response.WriteJSON(Envelope(snapshot))
             Catch ex As Exception
                 Call Fail(response, ex)
             End Try

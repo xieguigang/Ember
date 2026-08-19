@@ -74,6 +74,14 @@ Namespace AgentRuntime
         ''' </summary>
         Public Property shutdown_token As String = ""
 
+        ''' <summary>
+        ''' 头像图片目录：Web 界面头像选择列表的扫描来源，其中的文件经
+        ''' /resource/images/avatars/&lt;文件名&gt; 静态路由对外提供。
+        ''' 留空=自动探测（从 exe 目录向上逐级查找 agent\web\resource\images\avatars，
+        ''' 开发环境命中 G:\Ember\agent\web\resource\images\avatars）。
+        ''' </summary>
+        Public Property avatar_dir As String = ""
+
         ' ==================== 派生路径（运行时数据落盘位置） ====================
 
         ''' <summary>配置文件绝对路径</summary>
@@ -120,6 +128,47 @@ Namespace AgentRuntime
         Public ReadOnly Property SummaryLogFilePath As String
             Get
                 Return Path.Combine(DataDirectory, "summary_log.jsonl")
+            End Get
+        End Property
+
+        Dim _avatarDir As String = ""
+
+        ''' <summary>头像图片目录（绝对路径，自动探测或 ini [web] avatar_dir 指定；目录可能不存在，由调用方容错）</summary>
+        Public ReadOnly Property AvatarDir As String
+            Get
+                Return _avatarDir
+            End Get
+        End Property
+
+        ''' <summary>每日日记持久化目录（data\diary，绝对路径）</summary>
+        Public ReadOnly Property DiaryDir As String
+            Get
+                Return Path.Combine(DataDirectory, "diary")
+            End Get
+        End Property
+
+        ''' <summary>
+        ''' 头像目录的父级 Web 根（agent\web）：MountFs 静态服务第二根，
+        ''' 使 /resource/images/avatars/* 命中 avatarDir 中的物理文件。
+        ''' 目录不存在时返回空字符串（调用方退化为单根挂载）。
+        ''' </summary>
+        Public ReadOnly Property AgentWebRoot As String
+            Get
+                ' avatarDir 形如 ...\agent\web\resource\images\avatars → 上溯三级到 agent\web
+                Dim dir As DirectoryInfo = TryCast(New DirectoryInfo(AvatarDir), DirectoryInfo)
+                If dir Is Nothing OrElse dir.Parent Is Nothing Then Return ""
+
+                Dim imagesDir As DirectoryInfo = dir.Parent              ' images
+                If imagesDir.Parent Is Nothing Then Return ""
+                Dim resourceDir As DirectoryInfo = imagesDir.Parent      ' resource
+                If resourceDir.Parent Is Nothing Then Return ""
+                Dim webRoot As DirectoryInfo = resourceDir.Parent        ' web
+
+                If String.Equals(webRoot.Name, "web", StringComparison.OrdinalIgnoreCase) AndAlso webRoot.Exists Then
+                    Return webRoot.FullName
+                Else
+                    Return ""
+                End If
             End Get
         End Property
 
