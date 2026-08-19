@@ -108,7 +108,6 @@ Public Class EmberConfig
 
     Private Sub New(iniFilePath As String)
         Me.IniFilePath = iniFilePath
-        Me.DataDirectory = ""
     End Sub
 
     ''' <summary>
