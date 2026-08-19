@@ -1,6 +1,7 @@
 Imports System
 Imports System.Collections.Generic
 Imports System.IO
+Imports System.Linq
 Imports Microsoft.VisualBasic.Serialization.JSON
 
 ''' <summary>
@@ -174,6 +175,10 @@ Public Class UserProfile
         Dim profile As New UserProfile()
         Dim matched As Integer = 0
 
+        ' 模型可能将多个字段挤在同一行输出（如 "Traits: a,bInterests: x,y"），
+        ' 先在行内嵌入的字段标记前补换行再做行解析
+        text = BreakInlineFields(text)
+
         For Each line As String In text.Split({vbCrLf, vbLf, vbCr}, StringSplitOptions.RemoveEmptyEntries)
             Dim idx As Integer = line.IndexOf(":"c)
             Dim idxCn As Integer = line.IndexOf("："c)
@@ -205,6 +210,31 @@ Public Class UserProfile
         End If
 
         Return CheckProfile(profile)
+    End Function
+
+    ''' <summary>
+    ''' 将同一行内嵌入的多个字段标记拆分为独立行：
+    ''' 利用零宽正向先行断言在每个字段标记（英文键或中文映射键 + 冒号）前切分。
+    ''' </summary>
+    Private Shared Function BreakInlineFields(text As String) As String
+        ' 收集全部字段标记：英文属性名 + 中文映射键名，构造正则交替分支（需转义）
+        Dim markers As String() = {"Summary", "Traits", "Interests", "EmotionalState", "CommunicationStyle"} _
+            .Concat(FieldNameMap.Keys) _
+            .Select(AddressOf System.Text.RegularExpressions.Regex.Escape) _
+            .ToArray()
+        Dim pattern As String = "(?=(" & String.Join("|", markers) & ")\s*[:：])"
+
+        Dim sb As New System.Text.StringBuilder()
+
+        For Each line As String In text.Split({vbCrLf, vbLf, vbCr}, StringSplitOptions.RemoveEmptyEntries)
+            For Each seg As String In System.Text.RegularExpressions.Regex.Split(line.Trim(), pattern)
+                If Not String.IsNullOrWhiteSpace(seg) Then
+                    Call sb.AppendLine(seg.Trim())
+                End If
+            Next
+        Next
+
+        Return sb.ToString()
     End Function
 
     ''' <summary>
