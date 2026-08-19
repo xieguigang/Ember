@@ -329,6 +329,30 @@ Public Class CompanionAgent : Implements IDisposable
         Return sb.ToString()
     End Function
 
+    ''' <summary>
+    ''' 生成开场问候语：临时借用无记忆的总结客户端（不污染主对话上下文与持久化记忆），
+    ''' 请求前后切换其系统提示词，生成结果仅打印给用户。
+    ''' </summary>
+    Public Async Function GreetAsync() As Task(Of String)
+        Dim savedSystem As String = _sumClient.system_message
+
+        _sumClient.system_message =
+            _persona.Description.Trim() & vbCrLf &
+            "请始终以这个人设的身份说话。"
+
+        Try
+            Dim response As LLMsResponse = Await _sumClient.Chat(
+                "这是陪伴会话的开始。请以你的人设身份，用一两句自然、温暖的话向用户打招呼，" &
+                "开启今天的陪伴。只输出打招呼的内容本身，不要任何解释。")
+            Return If(response, New LLMsResponse).output
+        Catch ex As Exception
+            Call Console.Error.WriteLine($"[问候生成失败] {ex.Message}")
+            Return ""
+        Finally
+            _sumClient.system_message = savedSystem
+        End Try
+    End Function
+
     ' ==================== 用户命令支持 ====================
 
     ''' <summary>
