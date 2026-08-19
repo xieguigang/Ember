@@ -163,6 +163,22 @@ function applyTtsEnabled() {
   els.ttsToggleBtn.title = state.ttsEnabled ? "语音朗读：开（点击关闭）" : "语音朗读：关（点击开启）";
 }
 
+/**
+ * 在消息气泡 body 下挂“重播语音”按钮，点击对整条文本重新分片朗读。
+ * 历史消息与新回复共用，保证行为一致；服务端命中缓存即秒回。
+ * @param {HTMLElement} body 消息气泡容器（appendMessage 返回的 body）
+ * @param {string} text 完整回复文本
+ */
+function attachReplayBtn(body, text) {
+  if (!body) return;
+  const btn = document.createElement("button");
+  btn.className = "tts-replay";
+  btn.innerHTML = "🔊 重播语音";
+  btn.addEventListener("click", () => playReplyTts(text, btn));
+  body.appendChild(btn);
+  return btn;
+}
+
 /** 逐段合成并顺序播放：段1 合成→播放→ended 后续段。单段失败跳过续播。 */
 function playReplyTts(text, replayBtn) {
   if (!state.ttsEnabled) return;
@@ -975,9 +991,13 @@ async function loadHistory() {
     if (h.messages && h.messages.length) {
       h.messages.forEach((m) => {
         if (m.role === "user" || m.role === "assistant") {
-          appendMessage(m.role === "user" ? "user" : "ember", m.content, {
+          const { body } = appendMessage(m.role === "user" ? "user" : "ember", m.content, {
             animate: false,
           });
+          // 历史 Ember 回复挂重播按钮：刷新后仍可重听（服务端命中缓存秒回）
+          if (m.role === "assistant") {
+            attachReplayBtn(body, m.content || "");
+          }
         }
       });
       scrollToBottom(true);
@@ -1026,11 +1046,7 @@ async function sendMessage() {
 
     // 每条 Ember 回复下附加重播按钮（对整条文本重新分片朗读）
     const finalReply = r.reply || "";
-    const replayBtn = document.createElement("button");
-    replayBtn.className = "tts-replay";
-    replayBtn.innerHTML = "🔊 重播语音";
-    replayBtn.addEventListener("click", () => playReplyTts(finalReply, replayBtn));
-    body.appendChild(replayBtn);
+    const replayBtn = attachReplayBtn(body, finalReply);
 
     // 回复定格后自动朗读（受开关控制）
     playReplyTts(finalReply, replayBtn);
