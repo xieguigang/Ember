@@ -104,13 +104,13 @@ Public Class CompanionAgent : Implements IDisposable
         mainClient.temperature = config.temperature
         mainClient.max_context_tokens = config.max_context_tokens
 
-        ' 画像总结客户端：不保留记忆（一次性请求），低温度保证输出稳定
+        ' 画像总结客户端：不保留记忆（一次性请求），低温度保证输出格式稳定
         Dim sumClient As New LLMClient(
             provider:=config.CreateProvider(),
             model:=config.model,
             logfile:=config.SummaryLogFilePath,
             preserveMemory:=False)
-        sumClient.temperature = 0.2
+        sumClient.temperature = 0.1
         sumClient.system_message = SUMMARY_SYSTEM_PROMPT
 
         Dim agent As New CompanionAgent(config, mainClient, sumClient)
@@ -216,8 +216,8 @@ Public Class CompanionAgent : Implements IDisposable
         Dim prompt As String = BuildSummaryPrompt(recent, recalled)
         Dim response As LLMsResponse = Await _sumClient.Chat(prompt)
 
-        ' 4. 容错解析 JSON 画像；失败则保留旧画像
-        Dim newProfile As UserProfile = UserProfile.FromLlmJson(response.output)
+        ' 4. 容错解析画像（兼容 JSON 与行文本输出）；失败则保留旧画像
+        Dim newProfile As UserProfile = UserProfile.FromLlmOutput(response.output)
 
         If newProfile Is Nothing Then
             Call Console.WriteLine("[系统] 本轮画像总结结果无法解析，已保留原画像。")
@@ -278,12 +278,14 @@ Public Class CompanionAgent : Implements IDisposable
     End Function
 
     ''' <summary>
-    ''' 构造画像总结 prompt：当前画像 + 最近对话 + 召回的长期记忆 + 严格 JSON 输出格式要求。
+    ''' 构造画像总结 prompt：当前画像 + 最近对话 + 召回的长期记忆 + 行文本输出格式要求。
+    ''' 采用"键: 值"行文本格式而非 JSON——小模型对行格式的遵循度显著更高。
     ''' </summary>
     Private Function BuildSummaryPrompt(recent As List(Of ChatMessage), recalled As ChatMessage()) As String
         Dim sb As New StringBuilder()
 
-        Call sb.AppendLine("请根据以下对话信息，总结并更新这位用户的性格画像。")
+        Call sb.AppendLine("你正在长期陪伴一位用户进行情感交流。为了更好地理解 TA、调整你的陪伴语气，" &
+                           "请根据下面的对话信息总结这位用户的性格画像。")
 
         ' 当前已有画像
         Call sb.AppendLine()
@@ -315,22 +317,15 @@ Public Class CompanionAgent : Implements IDisposable
             Next
         End If
 
-        ' 输出格式要求（字段名与 UserProfile 属性严格一致，DataContractJsonSerializer 区分大小写）
+        ' 输出格式要求（字段名与 UserProfile 属性一致）
         Call sb.AppendLine()
-        Call sb.AppendLine("请只输出一个 JSON 对象。必须严格使用下面列出的 5 个英文键名（一字不差，区分大小写），" &
-                           "禁止使用中文键名，禁止发明其他键名，禁止输出任何解释文字与 markdown 代码块标记：")
-        Call sb.AppendLine("{")
-        Call sb.AppendLine("  ""Summary"": ""用户性格的总体概要，一两句话"",")
-        Call sb.AppendLine("  ""Traits"": [""性格特征关键词"", ""可以列举多个""],")
-        Call sb.AppendLine("  ""Interests"": [""感兴趣的话题"", ""可以列举多个""],")
-        Call sb.AppendLine("  ""EmotionalState"": ""用户近期的主要情绪状态"",")
-        Call sb.AppendLine("  ""CommunicationStyle"": ""用户偏好的沟通方式，例如：喜欢温暖细腻的关怀 / 喜欢简洁直接 / 喜欢幽默轻松""")
-        Call sb.AppendLine("}")
-        Call sb.AppendLine()
-        Call sb.AppendLine("示例输出：")
-        Call sb.AppendLine("{""Summary"": ""性格温和的上班族，近期压力较大""，""Traits"": [""急性子"", ""认真负责""], " &
-                           """Interests"": [""网球""], ""EmotionalState"": ""工作压力大，略疲惫"", " &
-                           """CommunicationStyle"": ""喜欢被温柔耐心地倾听""}")
+        Call sb.AppendLine("请严格按以下行格式输出画像，每行一个字段，字段名必须一字不差地照抄下面的英文键名；" &
+                           "不要输出 JSON，不要 markdown，不要解释文字，不要任何多余内容：")
+        Call sb.AppendLine("Summary: 用户性格的总体概要，一两句话")
+        Call sb.AppendLine("Traits: 性格特征1, 性格特征2（逗号分隔，列举 2~5 个）")
+        Call sb.AppendLine("Interests: 兴趣话题1, 兴趣话题2（逗号分隔，没有可写 无）")
+        Call sb.AppendLine("EmotionalState: 用户近期的主要情绪状态")
+        Call sb.AppendLine("CommunicationStyle: 用户偏好的沟通方式，例如：喜欢温暖细腻的关怀 / 喜欢简洁直接 / 喜欢幽默轻松")
 
         Return sb.ToString()
     End Function

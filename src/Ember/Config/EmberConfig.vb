@@ -119,7 +119,7 @@ Public Class EmberConfig
     ''' <returns>解析完成的配置对象（所有键缺失/非法时均安全回退默认值）</returns>
     Public Shared Function LoadOrCreate(Optional iniPath As String = Nothing) As EmberConfig
         If String.IsNullOrWhiteSpace(iniPath) Then
-            iniPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "settings.ini")
+            iniPath = Path.Combine(App.ProductProgramData, "settings.ini")
         End If
 
         iniPath = Path.GetFullPath(iniPath)

@@ -94,17 +94,18 @@ Public Class UserProfile
     }
 
     ''' <summary>
-    ''' 从 LLM 总结输出的 JSON 文本容错解析画像。
+    ''' 从 LLM 总结输出容错解析画像：优先按 JSON 解析（含中文键名归一化与嵌套解包），
+    ''' 失败后回退按"键: 值"行文本格式解析（小模型对行格式的遵循度远高于 JSON）。
     ''' </summary>
-    ''' <param name="json">LLM 输出的 JSON 文本（可包含 markdown 代码块包裹）</param>
-    ''' <returns>解析成功且非空画像返回新画像对象；解析失败或结果为空时返回 Nothing（调用方保留旧画像）</returns>
-    Public Shared Function FromLlmJson(json As String) As UserProfile
-        If String.IsNullOrWhiteSpace(json) Then
+    ''' <param name="llmOutput">LLM 原始输出文本</param>
+    ''' <returns>解析成功且非空画像返回新画像对象；失败返回 Nothing（调用方保留旧画像）</returns>
+    Public Shared Function FromLlmOutput(llmOutput As String) As UserProfile
+        If String.IsNullOrWhiteSpace(llmOutput) Then
             Return Nothing
         End If
 
         ' 剥离 markdown 代码块包裹（```json ... ```）
-        Dim text As String = json.Trim()
+        Dim text As String = llmOutput.Trim()
         If text.StartsWith("```") Then
             Dim firstLineEnd As Integer = text.IndexOf(vbLf)
             If firstLineEnd > 0 Then text = text.Substring(firstLineEnd + 1)
@@ -113,7 +114,23 @@ Public Class UserProfile
             text = text.Trim()
         End If
 
-        ' 提取第一个 { ... } JSON 对象片段，容忍 LLM 在 JSON 前后输出的说明文字
+        ' 含 "{" 时优先按 JSON 解析；失败再回退行文本（容忍混杂输出）
+        If text.Contains("{"c) Then
+            Dim byJson As UserProfile = TryParseJson(text)
+            If byJson IsNot Nothing Then
+                Return byJson
+            End If
+        End If
+
+        Return TryParseLines(text)
+    End Function
+
+    ''' <summary>
+    ''' 尝试按 JSON 对象解析画像：提取 { ... } 片段 → 嵌套单键包装解包 →
+    ''' 中文键名与大小写变体归一化 → DataContractJsonSerializer 反序列化。
+    ''' </summary>
+    Private Shared Function TryParseJson(text As String) As UserProfile
+        ' 提取第一个 { 与最后一个 } 之间的 JSON 片段，容忍 LLM 前后输出的说明文字
         Dim start As Integer = text.IndexOf("{"c)
         Dim [end] As Integer = text.LastIndexOf("}"c)
         If start < 0 OrElse [end] <= start Then
@@ -121,28 +138,124 @@ Public Class UserProfile
         End If
         text = text.Substring(start, [end] - start + 1)
 
-        ' 中文键名归一化：部分模型会无视英文键名要求输出中文键，
-        ' 在文本层面将已知中文键名替换为英文属性名后再解析（无法识别的键会被安全忽略）
+        ' 嵌套单键包装解包：{"user_profile": {...}} → {...}
+        Dim wrapped As System.Text.RegularExpressions.Match = System.Text.RegularExpressions.Regex.Match(
+            text, "^\s*\{\s*""[^""]+""\s*:\s*(\{.*\})\s*\}\s*$",
+            System.Text.RegularExpressions.RegexOptions.Singleline)
+        If wrapped.Success Then
+            text = wrapped.Groups(1).Value
+        End If
+
+        ' 中文键名 → 英文属性名归一化（文本层替换，无法识别的键会被反序列化安全忽略）
         For Each mapping In FieldNameMap
             text = text.Replace($"""{mapping.Key}""", $"""{mapping.Value}""")
         Next
 
+        ' 英文键名大小写变体归一化（DataContractJsonSerializer 严格区分大小写）
+        For Each eng As String In {"Summary", "Traits", "Interests", "EmotionalState", "CommunicationStyle"}
+            text = text.Replace($"""{eng.ToLower()}""", $"""{eng}""")
+            text = text.Replace($"""{eng.ToUpper()}""", $"""{eng}""")
+            text = text.Replace($"""{Char.ToLower(eng(0)) & eng.Substring(1)}""", $"""{eng}""")
+        Next
+
         Try
             Dim profile As UserProfile = text.LoadJSON(Of UserProfile)(simpleDict:=True, throwEx:=False)
-
-            If profile Is Nothing OrElse profile.IsEmpty Then
-                Return Nothing
-            End If
-
-            ' 列表字段空值保护
-            If profile.Traits Is Nothing Then profile.Traits = New List(Of String)
-            If profile.Interests Is Nothing Then profile.Interests = New List(Of String)
-
-            Return profile
+            Return CheckProfile(profile)
         Catch ex As Exception
-            Call Console.Error.WriteLine($"[Profile] 画像 JSON 解析失败，保留旧画像: {ex.Message}")
+            Call Console.Error.WriteLine($"[Profile] 画像 JSON 解析失败: {ex.Message}")
             Return Nothing
         End Try
+    End Function
+
+    ''' <summary>
+    ''' 尝试按"键: 值"行文本格式解析画像（每行一个字段，列表值以逗号/顿号/分号分隔）。
+    ''' </summary>
+    Private Shared Function TryParseLines(text As String) As UserProfile
+        Dim profile As New UserProfile()
+        Dim matched As Integer = 0
+
+        For Each line As String In text.Split({vbCrLf, vbLf, vbCr}, StringSplitOptions.RemoveEmptyEntries)
+            Dim idx As Integer = line.IndexOf(":"c)
+            Dim idxCn As Integer = line.IndexOf("："c)
+            If idxCn >= 0 AndAlso (idx < 0 OrElse idxCn < idx) Then idx = idxCn
+            If idx <= 0 Then Continue For
+
+            Dim key As String = line.Substring(0, idx).Trim().Trim(""""c, "*"c, "#"c, "-"c).Trim()
+            Dim value As String = line.Substring(idx + 1).Trim()
+
+            If value.Length = 0 Then Continue For
+
+            Select Case NormalizeKey(key)
+                Case NameOf(Summary)
+                    profile.Summary = CleanValue(value) : matched += 1
+                Case NameOf(Traits)
+                    profile.Traits = SplitList(value) : matched += 1
+                Case NameOf(Interests)
+                    profile.Interests = SplitList(value) : matched += 1
+                Case NameOf(EmotionalState)
+                    profile.EmotionalState = CleanValue(value) : matched += 1
+                Case NameOf(CommunicationStyle)
+                    profile.CommunicationStyle = CleanValue(value) : matched += 1
+            End Select
+        Next
+
+        ' 至少识别出两个字段才认为是有效画像，防止单条噪音行误判
+        If matched < 2 Then
+            Return Nothing
+        End If
+
+        Return CheckProfile(profile)
+    End Function
+
+    ''' <summary>
+    ''' 键名归一化：英文键大小写不敏感匹配 + 中文键名映射。
+    ''' </summary>
+    Private Shared Function NormalizeKey(key As String) As String
+        If String.IsNullOrWhiteSpace(key) Then Return Nothing
+
+        For Each eng As String In {"Summary", "Traits", "Interests", "EmotionalState", "CommunicationStyle"}
+            If String.Equals(key, eng, StringComparison.OrdinalIgnoreCase) Then
+                Return eng
+            End If
+        Next
+
+        Dim mapped As String = Nothing
+        If FieldNameMap.TryGetValue(key, mapped) Then
+            Return mapped
+        End If
+
+        Return Nothing
+    End Function
+
+    ''' <summary>清理值文本中的引号、句末标点与前后空白。</summary>
+    Private Shared Function CleanValue(value As String) As String
+        Return value.Trim().Trim(""""c, "'"c, ","c, "，"c, "."c, "。"c).Trim()
+    End Function
+
+    ''' <summary>将逗号/顿号/分号分隔的列表值拆分为字符串列表。</summary>
+    Private Shared Function SplitList(value As String) As List(Of String)
+        Dim items As New List(Of String)
+
+        For Each item As String In value.Split({",", "，", "、", ";", "；"}, StringSplitOptions.RemoveEmptyEntries)
+            Dim clean As String = CleanValue(item)
+            If clean.Length > 0 Then
+                Call items.Add(clean)
+            End If
+        Next
+
+        Return items
+    End Function
+
+    ''' <summary>校验解析结果非空并做列表字段空值保护。</summary>
+    Private Shared Function CheckProfile(profile As UserProfile) As UserProfile
+        If profile Is Nothing OrElse profile.IsEmpty Then
+            Return Nothing
+        End If
+
+        If profile.Traits Is Nothing Then profile.Traits = New List(Of String)
+        If profile.Interests Is Nothing Then profile.Interests = New List(Of String)
+
+        Return profile
     End Function
 
     ''' <summary>
