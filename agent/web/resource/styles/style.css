@@ -3,8 +3,8 @@
    coral 珊瑚橙（默认） / mint 薄荷绿 / sky 天空蓝 / sakura 樱花粉 / lemon 柠檬黄
    ============================================================ */
 
-/* Tailwind CSS CDN（工具类基础；核心视觉由下方自定义样式实现，离线时界面完整可用） */
-@import url("https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css");
+/* Tailwind CSS 本地副本（位于 resource/vendor，零外部网络依赖，离线可用） */
+@import url("../vendor/tailwind.min.css");
 
 /* ============================================================
    主题令牌：语义变量 + 每主题一组取值
@@ -1876,5 +1876,146 @@ body {
   *::after {
     animation-duration: 0.01ms !important;
     transition-duration: 0.01ms !important;
+  }
+}
+
+/* ============================================================
+   TTS 语音朗读
+   ============================================================ */
+
+/* 顶栏语音开关：关闭态变灰 + 斜杠覆盖 */
+#ttsToggleBtn.tts-off {
+  opacity: 0.5;
+  filter: grayscale(0.6);
+}
+#ttsToggleBtn.tts-off::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 26px;
+  height: 2.5px;
+  background: var(--ink2);
+  border-radius: 2px;
+  transform: translate(-50%, -50%) rotate(-45deg);
+  box-shadow: 0 0 0 1.5px var(--bg3);
+}
+
+/* 消息气泡下的重播小按钮 */
+.tts-replay {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 2px;
+  padding: 4px 10px;
+  border: 1.5px solid var(--line-strong);
+  border-radius: 999px;
+  background: var(--bg2);
+  color: var(--ink2);
+  font-family: var(--font);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    transform 0.16s ease,
+    border-color 0.18s ease,
+    color 0.18s ease,
+    background 0.18s ease;
+  user-select: none;
+}
+.tts-replay:hover {
+  transform: translateY(-1px);
+  border-color: var(--p1);
+  color: var(--p3);
+  background: var(--soft);
+}
+.tts-replay:active {
+  transform: scale(0.95);
+}
+/* 正在朗读时高亮重播按钮 */
+.tts-replay.playing {
+  border-color: var(--p1);
+  color: var(--p3);
+  background: var(--soft);
+}
+
+/* TTS 状态条 */
+.tts-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+  padding: 6px 12px 6px 10px;
+  border-radius: 999px;
+  background: var(--soft);
+  border: 1px solid var(--line);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink2);
+  align-self: flex-start;
+  max-width: 100%;
+  animation: riseIn 0.3s ease;
+}
+
+/* 合成中：呼吸光点 */
+.tts-status.synth::before {
+  content: "";
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--p-grad);
+  animation: ttsBreathe 1.4s ease-in-out infinite;
+  flex: none;
+}
+@keyframes ttsBreathe {
+  0%,
+  100% {
+    transform: scale(0.7);
+    opacity: 0.5;
+    box-shadow: 0 0 0 0 var(--glow1);
+  }
+  50% {
+    transform: scale(1.1);
+    opacity: 1;
+    box-shadow: 0 0 0 5px var(--glow2);
+  }
+}
+
+/* 播放中：音波跳动（三条竖条） */
+.tts-status.playing .tts-wave {
+  display: inline-flex;
+  align-items: center;
+  gap: 2.5px;
+  height: 14px;
+  margin: 0 1px;
+}
+.tts-status.playing .tts-wave i {
+  display: block;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--p1);
+  animation: ttsWave 0.9s ease-in-out infinite;
+}
+.tts-status.playing .tts-wave i:nth-child(1) {
+  height: 6px;
+  animation-delay: 0s;
+}
+.tts-status.playing .tts-wave i:nth-child(2) {
+  height: 14px;
+  animation-delay: 0.15s;
+}
+.tts-status.playing .tts-wave i:nth-child(3) {
+  height: 9px;
+  animation-delay: 0.3s;
+}
+@keyframes ttsWave {
+  0%,
+  100% {
+    transform: scaleY(0.4);
+    opacity: 0.6;
+  }
+  50% {
+    transform: scaleY(1);
+    opacity: 1;
   }
 }

@@ -84,6 +84,12 @@ const state = {
   avatarPrefix: "/resource/images/avatars/",
   avatarList: [], // 可用头像文件名（服务端扫描）
   avatarFile: localStorage.getItem("ember-avatar") || "", // 用户选择（'' = 默认）
+  // 语音朗读（默认开启，localStorage: ember-tts）
+  ttsEnabled: localStorage.getItem("ember-tts") !== "off",
+  ttsAudio: null,        // 当前播放的 Audio 实例
+  ttsUrls: [],           // 已创建待释放的 objectURL 列表
+  ttsAborted: false,     // 打断标记（新对话/关闭开关时置位）
+  ttsFailedNotified: false, // 本轮是否已提示 TTS 不可用（最多一次）
 };
 
 /* ============================================================

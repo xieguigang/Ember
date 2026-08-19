@@ -1,8 +1,10 @@
 Imports System.Linq
+Imports System.Net.Http
 Imports Flute.Http.AppEngine
 Imports Flute.Http.Core
 Imports Flute.Http.Core.Message
 Imports Flute.Http.Core.Message.HttpHeader
+Imports Microsoft.VisualBasic.Net.Http
 
 Namespace Web
 
@@ -290,14 +292,14 @@ Namespace Web
                         ttsResp = _httpClient.GetAsync(reqUrl).GetAwaiter().GetResult()
                     Catch ex As Exception
                         Call Console.Error.WriteLine($"[TTS] 调用 TTS 服务失败: {ex.Message}")
-                        Call response.WriteError(HTTP_RFC.SERVICE_UNAVAILABLE, "TTS 服务不可用，请确认本地语音合成服务已启动")
+                        Call response.WriteError(HTTP_RFC.RFC_BAD_GATEWAY, "TTS 服务不可用，请确认本地语音合成服务已启动")
                         Return
                     End Try
 
                     Using ttsResp
                         If Not ttsResp.IsSuccessStatusCode Then
                             Call Console.Error.WriteLine($"[TTS] TTS 服务返回非成功状态: {(CInt(ttsResp.StatusCode))}")
-                            Call response.WriteError(HTTP_RFC.SERVICE_UNAVAILABLE, "TTS 服务返回错误，语音合成失败")
+                            Call response.WriteError(HTTP_RFC.RFC_BAD_GATEWAY, "TTS 服务返回错误，语音合成失败")
                             Return
                         End If
 
@@ -305,7 +307,7 @@ Namespace Web
                     End Using
 
                     If wav Is Nothing OrElse wav.Length = 0 Then
-                        Call response.WriteError(HTTP_RFC.SERVICE_UNAVAILABLE, "TTS 服务返回空音频")
+                        Call response.WriteError(HTTP_RFC.RFC_BAD_GATEWAY, "TTS 服务返回空音频")
                         Return
                     End If
 

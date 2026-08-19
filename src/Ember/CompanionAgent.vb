@@ -40,6 +40,12 @@ Public Class CompanionAgent : Implements IDisposable
     Private ReadOnly _gate As New SemaphoreSlim(1, 1)
 
     ReadOnly _config As EmberConfig
+    ''' <summary>对外只读配置访问（Web 控制器读取 TTS/缓存目录等配置项）。</summary>
+    Public ReadOnly Property Config As EmberConfig
+        Get
+            Return _config
+        End Get
+    End Property
     ReadOnly _mainClient As LLMClient
     ReadOnly _sumClient As LLMClient
     ReadOnly _storage As MemoryPersistsStorage
