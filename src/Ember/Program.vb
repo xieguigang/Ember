@@ -46,52 +46,21 @@ Module Program
         End Try
 
         ' 解析命令行参数
-        Dim httpMode As Boolean = False
         Dim portOverride As Integer = 0
         Dim wwwrootOverride As String = Nothing
+        Dim opts As Opts = Ember.Opts.Build(args)
 
-        Dim i As Integer = 0
-        While i < args.Length
-            Dim arg As String = args(i)
-
-            Select Case arg.ToLowerInvariant()
-                Case "--http"
-                    httpMode = True
-
-                Case "--help", "-h", "/?"
-                    Call PrintUsage()
-                    Return 0
-
-                Case "--port"
-                    If i + 1 < args.Length AndAlso Integer.TryParse(args(i + 1), portOverride) Then
-                        i += 1
-                    End If
-
-                Case "--wwwroot"
-                    If i + 1 < args.Length Then
-                        wwwrootOverride = args(i + 1)
-                        i += 1
-                    End If
-
-                Case Else
-                    ' 支持 --port=8080 / --wwwroot=DIR 等值内联形式
-                    If arg.StartsWith("--port=", StringComparison.OrdinalIgnoreCase) Then
-                        Integer.TryParse(arg.Substring("--port=".Length), portOverride)
-                    ElseIf arg.StartsWith("--wwwroot=", StringComparison.OrdinalIgnoreCase) Then
-                        wwwrootOverride = arg.Substring("--wwwroot=".Length)
-                    Else
-                        Call Console.Error.WriteLine($"未知参数: {arg}（--help 查看用法）")
-                        Return 1
-                    End If
-            End Select
-
-            i += 1
-        End While
+        If opts.help Then
+            Call PrintHelp()
+        Else
+            portOverride = opts.port
+            wwwrootOverride = opts.wwwroot
+        End If
 
         ' 加载（或首次生成）ini 配置
         Dim config As EmberConfig = EmberConfig.LoadOrCreate()
 
-        If httpMode Then
+        If opts.http_mode Then
             Return RunHttpService(config, portOverride, wwwrootOverride)
         Else
             Return RunCliMode(config)

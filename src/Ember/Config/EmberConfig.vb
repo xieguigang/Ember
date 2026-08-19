@@ -279,9 +279,18 @@ Public Class EmberConfig
     End Function
 
     ''' <summary>
+    ''' 判断候选目录是否为有效的前端根目录：目录存在且包含 index.html。
+    ''' （仅按目录名探测会误命中项目内同名的服务端源码目录 Web\，故以 index.html 为标志文件）
+    ''' </summary>
+    Private Shared Function IsWebRoot(candidate As String) As Boolean
+        Return Directory.Exists(candidate) AndAlso File.Exists(System.IO.Path.Combine(candidate, "index.html"))
+    End Function
+
+    ''' <summary>
     ''' 解析 Web 静态文件根目录（三级优先：命令行 --wwwroot 覆盖 → ini [web] wwwroot 显式配置 → 自动探测）。
     ''' 自动探测：exe 同级 web 目录 → 从 exe 目录向上逐级查找名为 web 的目录（最多 6 级，
     ''' 开发环境可自动命中仓库根下的 web 文件夹）；均失败时回退 exe 同级 web 并提示。
+    ''' 候选目录必须包含 index.html 才会被采纳（<see cref="IsWebRoot"/>）。
     ''' </summary>
     ''' <param name="cliOverride">命令行 --wwwroot 参数值（空表示未指定）</param>
     ''' <returns>解析出的 wwwroot 绝对路径（不校验存在性，由调用方提示）</returns>
@@ -300,8 +309,8 @@ Public Class EmberConfig
         Dim exeDir As String = GetExecutableDirectory()
 
         ' 3a. exe 同级 web
-        Dim candidate As String = Path.Combine(exeDir, "web")
-        If Directory.Exists(candidate) Then
+        Dim candidate As String = System.IO.Path.Combine(exeDir, "web")
+        If IsWebRoot(candidate) Then
             Return candidate
         End If
 
@@ -311,14 +320,14 @@ Public Class EmberConfig
             If dir.Parent Is Nothing Then Exit For
             dir = dir.Parent
 
-            candidate = Path.Combine(dir.FullName, "web")
-            If Directory.Exists(candidate) Then
+            candidate = System.IO.Path.Combine(dir.FullName, "web")
+            If IsWebRoot(candidate) Then
                 Return candidate
             End If
         Next
 
         ' 4. 均失败：回退 exe 同级 web（调用方负责提示目录不存在）
-        Return Path.Combine(exeDir, "web")
+        Return System.IO.Path.Combine(exeDir, "web")
     End Function
 
     ''' <summary>相对路径基于 exe 所在目录解析为绝对路径。</summary>
