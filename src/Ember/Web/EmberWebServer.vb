@@ -84,7 +84,11 @@ Public Class EmberWebServer
     ''' </summary>
     ''' <returns>服务运行状态码（0=正常关闭）</returns>
     Public Function Run() As Integer
-        Return _server.Run()
+        If _server IsNot Nothing Then
+            Return _server.Run()
+        Else
+            Return -1
+        End If
     End Function
 
     ''' <summary>
