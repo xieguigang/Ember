@@ -1,3 +1,4 @@
+Imports System.Linq
 Imports Flute.Http.AppEngine
 Imports Flute.Http.Core
 Imports Flute.Http.Core.Message
@@ -18,6 +19,12 @@ Namespace Web
     ''' 所有 handler 均有全局异常捕获，异常返回 code=500 的 JSON，绝不让 worker 线程崩溃。
     ''' </summary>
     Public Class EmberApiController
+
+        ''' <summary>默认头像文件名（缺失时前端回退 emoji）</summary>
+        Private Const DEFAULT_AVATAR As String = "ember_default.jpg"
+
+        ''' <summary>可作为头像的图片扩展名</summary>
+        Private Shared ReadOnly AVATAR_EXTENSIONS As String() = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
 
         ReadOnly _agent As CompanionAgent
 

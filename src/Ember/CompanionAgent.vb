@@ -613,6 +613,13 @@ Public Class CompanionAgent : Implements IDisposable
         Return sb.ToString().Trim()
     End Function
 
+    ''' <summary>
+    ''' 获取头像图片目录（只读配置信息，无状态副作用，无需互斥）。
+    ''' </summary>
+    Public Function GetAvatarDirectory() As String
+        Return _config.AvatarDir
+    End Function
+
     ' ==================== 持久化（互斥） ====================
 
     ''' <summary>

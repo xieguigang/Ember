@@ -46,7 +46,7 @@ Namespace Application
                 ' 组装并启动服务器（构造时预检端口占用，失败抛 InvalidOperationException）
                 Dim server As EmberWebServer
                 Try
-                    server = New EmberWebServer(agent, port, wwwroot, config.shutdown_token)
+                    server = New EmberWebServer(agent, port, wwwroot, config.shutdown_token, config.AgentWebRoot)
                     Call server.Start()
                 Catch ex As InvalidOperationException
                     Call Console.Error.WriteLine($"[错误] {ex.Message}")

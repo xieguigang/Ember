@@ -11,4 +11,12 @@
     Public Class ProfileRefreshResult
         Public Property updated As Boolean
     End Class
+
+    ''' <summary>头像列表（GET /api/avatars 响应体）。</summary>
+    Public Class AvatarListResult
+        ''' <summary>头像静态资源 URL 前缀（/resource/images/avatars/）</summary>
+        Public Property urlPrefix As String = "/resource/images/avatars/"
+        ''' <summary>可用头像文件名列表（默认头像置首；目录不存在时为空数组）</summary>
+        Public Property avatars As New List(Of String)
+    End Class
 End Namespace

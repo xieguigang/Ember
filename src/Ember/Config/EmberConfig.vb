@@ -281,7 +281,7 @@ Namespace AgentRuntime
                 Return Path.GetFullPath(ResolveRelative(avatar_dir.Trim()))
             End If
 
-            Dim exeDir As String = GetExecutableDirectory()
+            Dim exeDir As String = App.HOME
             Dim dir As New DirectoryInfo(exeDir)
 
             For i As Integer = 0 To 8
