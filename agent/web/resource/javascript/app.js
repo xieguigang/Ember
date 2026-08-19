@@ -11,6 +11,8 @@ const els = {
   connStatus: $("connStatus"),
   connText: $("connText"),
   modelChip: $("modelChip"),
+  // 语音朗读
+  ttsToggleBtn: $("ttsToggleBtn"),
   // 主题
   themeBtn: $("themeBtn"),
   themeModal: $("themeModal"),
@@ -118,6 +120,144 @@ function applyTheme(name) {
 function initTheme() {
   const saved = localStorage.getItem("ember-theme");
   applyTheme(saved || "coral");
+}
+
+/* ============================================================
+   语音朗读（TTS）
+   ============================================================ */
+
+/** 将文本按换行分割、清洗为可朗读的片段列表（跳过空段，去掉 *动作* 标记）。 */
+function splitTtsSegments(text) {
+  return String(text)
+    .split(/\r\n|\r|\n/)
+    .map((line) => line
+      .replace(/\*([^*]+)\*/g, "$1") // 去掉 markdown 星号动作标记
+      .trim())
+    .filter((line) => line.length > 0);
+}
+
+/** 释放全部已创建、尚未回收的 objectURL，防止内存/句柄泄漏。 */
+function revokeTtsUrls() {
+  state.ttsUrls.forEach((u) => {
+    try { URL.revokeObjectURL(u); } catch (e) {}
+  });
+  state.ttsUrls = [];
+}
+
+/** 打断当前朗读：暂停音频 + 清空队列 + 释放 URL。新对话/重播/关闭开关时调用。 */
+function stopCurrentTts() {
+  state.ttsAborted = true;
+  if (state.ttsAudio) {
+    try { state.ttsAudio.pause(); } catch (e) {}
+    state.ttsAudio = null;
+  }
+  revokeTtsUrls();
+  // 移除挂在点上的状态条
+  document.querySelectorAll(".tts-status").forEach((n) => n.remove());
+  document.querySelectorAll(".tts-replay.playing").forEach((n) => n.classList.remove("playing"));
+}
+
+/** 更新顶栏开关视觉与记忆。 */
+function applyTtsEnabled() {
+  els.ttsToggleBtn.classList.toggle("tts-off", !state.ttsEnabled);
+  els.ttsToggleBtn.title = state.ttsEnabled ? "语音朗读：开（点击关闭）" : "语音朗读：关（点击开启）";
+}
+
+/** 逐段合成并顺序播放：段1 合成→播放→ended 后续段。单段失败跳过续播。 */
+function playReplyTts(text, replayBtn) {
+  if (!state.ttsEnabled) return;
+
+  // 先打断上一条（若有），并准备本轮状态
+  stopCurrentTts();
+  state.ttsAborted = false;
+  state.ttsFailedNotified = false;
+
+  const segments = splitTtsSegments(text);
+  if (segments.length === 0) return;
+
+  if (replayBtn) replayBtn.classList.add("playing");
+
+  const statusEl = document.createElement("div");
+  statusEl.className = "tts-status synth";
+  statusEl.innerHTML = `<span class="tts-wave" style="display:none"><i></i><i></i><i></i></span><span class="tts-text">合成中…</span>`;
+  if (replayBtn && replayBtn.parentNode) {
+    replayBtn.parentNode.insertBefore(statusEl, replayBtn.nextSibling);
+  } else {
+    // 兜底：追加到消息区
+    els.messages.appendChild(statusEl);
+  }
+
+  let index = 0;
+
+  function finish() {
+    try { statusEl.remove(); } catch (e) {}
+    if (replayBtn) replayBtn.classList.remove("playing");
+    revokeTtsUrls();
+  }
+
+  function playNext() {
+    if (state.ttsAborted) { finish(); return; }
+    if (index >= segments.length) { finish(); return; }
+
+    const seg = segments[index];
+    const total = segments.length;
+    index += 1;
+
+    statusEl.className = "tts-status synth";
+    statusEl.querySelector(".tts-text").textContent = `合成中（第 ${index}/${total} 段）`;
+    statusEl.querySelector(".tts-wave").style.display = "none";
+
+    const url = `/api/tts?text=${encodeURIComponent(seg)}`;
+    fetch(url)
+      .then((r) => {
+        if (!r.ok) throw new Error("tts_http_" + r.status);
+        return r.blob();
+      })
+      .then((blob) => {
+        if (state.ttsAborted) { finish(); return; }
+        const objUrl = URL.createObjectURL(blob);
+        state.ttsUrls.push(objUrl);
+
+        const audio = new Audio(objUrl);
+        state.ttsAudio = audio;
+
+        audio.onended = () => { try { URL.revokeObjectURL(objUrl); } catch (e) {} playNext(); };
+        audio.onerror = () => { playNext(); }; // 播放失败：跳过续播
+
+        // 切换为“播放中”状态
+        statusEl.className = "tts-status playing";
+        statusEl.querySelector(".tts-text").textContent = `播放中（第 ${index}/${total} 段）`;
+        statusEl.querySelector(".tts-wave").style.display = "inline-flex";
+
+        audio.play().catch(() => playNext());
+      })
+      .catch(() => {
+        // 单段失败：跳过并续播；全部失败仅提示一次
+        if (!state.ttsFailedNotified) {
+          state.ttsFailedNotified = true;
+          toast("语音合成暂时不可用，已静默跳过", true);
+        }
+        playNext();
+      });
+  }
+
+  playNext();
+}
+
+/** 绑定顶栏语音开关。 */
+function initTts() {
+  applyTtsEnabled();
+  els.ttsToggleBtn.addEventListener("click", () => {
+    state.ttsEnabled = !state.ttsEnabled;
+    localStorage.setItem("ember-tts", state.ttsEnabled ? "on" : "off");
+    applyTtsEnabled();
+    if (!state.ttsEnabled) {
+      stopCurrentTts();
+      toast("已关闭语音朗读");
+    } else {
+      toast("已开启语音朗读");
+    }
+  });
 }
 
 /** 给欢迎横幅头像容器补齐 img+emoji 结构（HTML 中初始只有 emoji 文本） */
@@ -854,6 +994,8 @@ async function sendMessage() {
   const text = els.inputBox.value.trim();
   if (!text || state.sending) return;
 
+  stopCurrentTts(); // 新对话：立即打断上一条朗读，避免重叠
+
   state.sending = true;
   els.sendBtn.disabled = true;
   els.sendBtn.classList.add("sending");
@@ -881,6 +1023,18 @@ async function sendMessage() {
       );
     }
     appendThinkBlock(body, r.think);
+
+    // 每条 Ember 回复下附加重播按钮（对整条文本重新分片朗读）
+    const finalReply = r.reply || "";
+    const replayBtn = document.createElement("button");
+    replayBtn.className = "tts-replay";
+    replayBtn.innerHTML = "🔊 重播语音";
+    replayBtn.addEventListener("click", () => playReplyTts(finalReply, replayBtn));
+    body.appendChild(replayBtn);
+
+    // 回复定格后自动朗读（受开关控制）
+    playReplyTts(finalReply, replayBtn);
+
     scrollToBottom();
 
     // 对话可能触发画像/日记更新，异步刷新侧栏
@@ -1104,6 +1258,7 @@ function bindEvents() {
    ============================================================ */
 async function init() {
   initTheme();
+  initTts();
   ensureWelcomeAvatarStructure();
   bindEvents();
   await loadAvatars();
