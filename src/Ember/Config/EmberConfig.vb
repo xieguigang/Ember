@@ -82,6 +82,17 @@ Namespace AgentRuntime
         ''' </summary>
         Public Property avatar_dir As String = ""
 
+        ''' <summary>
+        ''' 本地 TTS 语音合成服务地址（返回 wav 音频流），Web 端经后端 /api/tts 代理访问以规避跨域。
+        ''' 服务地址应带结尾斜杠，例如 http://127.0.0.1:9880/
+        ''' </summary>
+        Public Property tts_url As String = "http://127.0.0.1:9880/"
+
+        ''' <summary>
+        ''' 转发给 TTS 服务的语言参数（与 tts_url 的 text_language 查询参数对应）。
+        ''' </summary>
+        Public Property tts_language As String = "zh"
+
         ' ==================== 派生路径（运行时数据落盘位置） ====================
 
         ''' <summary>配置文件绝对路径</summary>
@@ -144,6 +155,19 @@ Namespace AgentRuntime
         Public ReadOnly Property DiaryDir As String
             Get
                 Return Path.Combine(DataDirectory, "diary")
+            End Get
+        End Property
+
+        ''' <summary>
+        ''' TTS 合成音频缓存目录（与 data 目录平级，即 &lt;data_dir 父级&gt;\cache）。
+        ''' 单段语音以 SHA256(文本|语言) 命名落盘，容量超上限时按最旧优先淘汰。
+        ''' </summary>
+        Public ReadOnly Property CacheDirectory As String
+            Get
+                ' data_dir 默认相对配置文件所在目录解析，故 cache 与 data 同父级
+                Dim parent As String = Path.GetDirectoryName(DataDirectory)
+                If String.IsNullOrEmpty(parent) Then parent = DataDirectory
+                Return Path.Combine(parent, "cache")
             End Get
         End Property
 
@@ -245,6 +269,8 @@ Namespace AgentRuntime
                 wwwroot = ini.ReadString(SECTION_WEB, NameOf(wwwroot), wwwroot)
                 shutdown_token = ini.ReadString(SECTION_WEB, NameOf(shutdown_token), shutdown_token)
                 avatar_dir = ini.ReadString(SECTION_WEB, NameOf(avatar_dir), avatar_dir)
+                tts_url = ini.ReadString(SECTION_WEB, NameOf(tts_url), tts_url)
+                tts_language = ini.ReadString(SECTION_WEB, NameOf(tts_language), tts_language)
             End Using
 
             ' 数值参数合法性保护
@@ -321,6 +347,8 @@ Namespace AgentRuntime
                 Call ini.WriteValue(SECTION_WEB, NameOf(wwwroot), "", "Web 静态文件根目录；留空则自动探测（exe 同级 web 目录，或向上逐级查找名为 web 的目录）")
                 Call ini.WriteValue(SECTION_WEB, NameOf(shutdown_token), "", "远程关闭令牌：设置后可在 Web 界面输入该令牌远程安全关闭服务（自动保存数据后退出）；留空禁用远程关闭")
                 Call ini.WriteValue(SECTION_WEB, NameOf(avatar_dir), "", "头像图片目录：Web 头像选择列表的扫描来源；留空则自动探测（向上查找 agent\\web\\resource\\images\\avatars）")
+                Call ini.WriteValue(SECTION_WEB, NameOf(tts_url), "http://127.0.0.1:9880/", "本地 TTS 语音合成服务地址（返回 wav 音频流）；Web 经后端 /api/tts 同代理访问以规避跨域，地址需带结尾斜杠")
+                Call ini.WriteValue(SECTION_WEB, NameOf(tts_language), "zh", "转发给 TTS 服务的语言参数（对应 text_language 查询参数）")
 
                 Call ini.Flush()
             End Using
