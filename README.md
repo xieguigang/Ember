@@ -1,1 +1,1 @@
-# LLM-Pet
+# Ember LLM Companion Agent
