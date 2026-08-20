@@ -2019,3 +2019,191 @@ body {
     opacity: 1;
   }
 }
+
+/* ============================================================
+   Web 密码锁覆盖层（enable_password=true 时显示）
+   ============================================================ */
+.lock-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: radial-gradient(
+      120% 120% at 50% 0%,
+      var(--bg1) 0%,
+      var(--bg2) 60%,
+      var(--bg3) 100%
+    );
+  backdrop-filter: blur(14px) saturate(120%);
+  -webkit-backdrop-filter: blur(14px) saturate(120%);
+  animation: lockFadeIn 0.4s ease;
+}
+/* 解锁成功后淡出移除 */
+.lock-screen.lock-hide {
+  animation: lockFadeOut 0.45s ease forwards;
+  pointer-events: none;
+}
+
+.lock-card {
+  width: 100%;
+  max-width: 360px;
+  padding: 38px 32px 32px;
+  text-align: center;
+  background: var(--bg3);
+  border: 1px solid var(--card-line);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 30px 80px rgba(138, 106, 84, 0.22);
+  animation: lockCardIn 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.lock-avatar {
+  width: 72px;
+  height: 72px;
+  margin: 0 auto 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 34px;
+  border-radius: 50%;
+  background: var(--p-grad);
+  box-shadow: var(--shadow-p);
+  animation: lockFloat 3.4s ease-in-out infinite;
+}
+
+.lock-title {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--ink1);
+  letter-spacing: 0.5px;
+}
+
+.lock-subtitle {
+  margin: 6px 0 26px;
+  font-size: 14px;
+  color: var(--ink2);
+}
+
+.lock-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 14px 16px;
+  font-size: 15px;
+  font-family: var(--font);
+  color: var(--ink1);
+  background: var(--bg2);
+  border: 1.5px solid var(--line-strong);
+  border-radius: var(--radius-md);
+  outline: none;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+}
+.lock-input::placeholder {
+  color: var(--ink2);
+  opacity: 0.7;
+}
+.lock-input:focus {
+  background: var(--bg3);
+  border-color: var(--p1);
+  box-shadow: 0 0 0 4px rgba(255, 138, 101, 0.18);
+}
+
+.lock-btn {
+  width: 100%;
+  margin-top: 16px;
+  padding: 14px 16px;
+  font-size: 15px;
+  font-weight: 600;
+  font-family: var(--font);
+  color: var(--ink3);
+  background: var(--p-grad);
+  border: none;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  box-shadow: var(--shadow-p);
+  transition: transform 0.16s ease, box-shadow 0.2s ease, filter 0.2s ease;
+}
+.lock-btn:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-p-hover);
+  filter: brightness(1.04);
+}
+.lock-btn:active:not(:disabled) {
+  transform: translateY(0) scale(0.98);
+}
+.lock-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.lock-error {
+  margin: 14px 0 0;
+  min-height: 18px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--danger);
+  opacity: 0;
+  transform: translateY(-4px);
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+.lock-error.show {
+  opacity: 1;
+  transform: translateY(0);
+}
+/* 密码错误时输入框抖动 */
+.lock-input.shake {
+  animation: lockShake 0.4s ease;
+  border-color: var(--danger);
+}
+
+@keyframes lockFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes lockFadeOut {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+@keyframes lockCardIn {
+  from {
+    opacity: 0;
+    transform: translateY(18px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+@keyframes lockFloat {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-6px);
+  }
+}
+@keyframes lockShake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  20%,
+  60% {
+    transform: translateX(-8px);
+  }
+  40%,
+  80% {
+    transform: translateX(8px);
+  }
+}

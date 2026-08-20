@@ -71,6 +71,11 @@ const els = {
   shutdownCancelBtn: $("shutdownCancelBtn"),
   farewellScreen: $("farewellScreen"),
   toast: $("toast"),
+  // 密码锁
+  lockScreen: $("lockScreen"),
+  lockInput: $("lockInput"),
+  lockSubmit: $("lockSubmit"),
+  lockError: $("lockError"),
 };
 
 /* ---------------- 全局状态 ---------------- */
@@ -444,10 +449,20 @@ function selectAvatar(file) {
    API 客户端
    ============================================================ */
 async function api(path, options = {}) {
-  const resp = await fetch(path, {
-    headers: { "Content-Type": "application/json" },
-    ...options,
-  });
+  // 携带会话令牌（密码锁解锁后由后端返回），后端统一鉴权
+  const headers = Object.assign(
+    { "Content-Type": "application/json" },
+    options.headers || {},
+  );
+  if (sessionToken) headers["X-Access-Token"] = sessionToken;
+
+  const resp = await fetch(path, { headers, ...options });
+
+  // 401：会话失效（令牌过期 / 未解锁），退回锁屏
+  if (resp.status === 401 && els.lockScreen && !els.lockScreen.classList.contains("lock-hide")) {
+    showLockScreen("会话已失效，请重新输入密码");
+  }
+
   if (!resp.ok) {
     throw new Error(`HTTP ${resp.status}`);
   }
@@ -1278,6 +1293,10 @@ async function init() {
   ensureWelcomeAvatarStructure();
   bindEvents();
   await loadAvatars();
+
+  // 密码锁前置检查：未启用则跳过；启用则需先解锁再加载数据
+  await ensureUnlocked();
+
   await Promise.allSettled([
     loadPersona(),
     loadProfile(),
