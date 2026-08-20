@@ -2,6 +2,7 @@ Imports Flute.Http.Configurations
 Imports Flute.Http.Core
 Imports Flute.Http.FileSystem
 Imports Microsoft.VisualBasic.Net
+Imports AgentRuntime
 
 Namespace Web
 
@@ -25,6 +26,7 @@ Namespace Web
         ReadOnly _port As Integer
         ReadOnly _wwwroot As String
         ReadOnly _agentWebRoot As String
+        ReadOnly _config As EmberConfig
         ReadOnly _configs As Configuration
         Dim _server As HttpSocket
 
@@ -49,13 +51,14 @@ Namespace Web
         ''' <param name="port">监听端口</param>
         ''' <param name="wwwroot">Web 静态文件根目录</param>
         ''' <param name="shutdownToken">远程关闭令牌（空字符串=禁用远程关闭）</param>
+        ''' <param name="config">Ember 运行时配置（含密码锁开关与密码，用于注入 API 控制器鉴权）</param>
         ''' <param name="agentWebRoot">
         ''' Agent 资源 Web 根（如 agent\web，含 resource\images\avatars 头像图片）；
         ''' 非空且存在时作为静态服务第二根挂载，使 /resource/* 命中其中的物理文件；
         ''' 为空时退化为单根挂载。
         ''' </param>
         Public Sub New(agent As CompanionAgent, port As Integer, wwwroot As String, shutdownToken As String,
-                       Optional agentWebRoot As String = "")
+                       config As EmberConfig, Optional agentWebRoot As String = "")
             If Not Tcp.PortIsAvailable(port) Then
                 Throw New InvalidOperationException($"端口 {port} 已被其他程序占用，无法启动 HTTP 服务模式。" &
                                                     $"请关闭占用程序，或通过命令行 --port / settings.ini [web] http_port 更换端口。")
@@ -65,6 +68,7 @@ Namespace Web
             _port = port
             _wwwroot = wwwroot
             _agentWebRoot = agentWebRoot
+            _config = config
             _configs = New Configuration With {
                 .shutdown_token = If(shutdownToken, "").Trim(),
                 .silent = True
@@ -76,8 +80,8 @@ Namespace Web
         ''' 实际开始接受请求需调用 <see cref="Run"/>。
         ''' </summary>
         Public Sub Start()
-            ' 1. 反射注册 /api/* 端点
-            Dim router As New HttpRouter(New EmberApiController(_agent))
+            ' 1. 反射注册 /api/* 端点（注入运行时配置，启用密码锁鉴权）
+            Dim router As New HttpRouter(New EmberApiController(_agent, _config))
 
             ' 2. 挂载静态文件服务：主根=Web 前端；agentWebRoot 存在时追加第二根
             '    （Flute 多根按顺序逐个查找物理文件，/resource/images/avatars/* 命中 agent 资源目录）

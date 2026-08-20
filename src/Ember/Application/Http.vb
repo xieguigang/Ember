@@ -43,10 +43,16 @@ Namespace Application
                     Call Console.WriteLine("远程关闭: 已启用（Web 界面可通过令牌安全关闭服务）")
                 End If
 
+                If config.enable_password Then
+                    Call Console.WriteLine("Web 密码锁: 已启用（进入聊天界面前需输入密码，全接口已受令牌保护）")
+                Else
+                    Call Console.WriteLine("Web 密码锁: 未启用（settings.ini [web] enable_password=true 可开启）")
+                End If
+
                 ' 组装并启动服务器（构造时预检端口占用，失败抛 InvalidOperationException）
                 Dim server As EmberWebServer
                 Try
-                    server = New EmberWebServer(agent, port, wwwroot, config.shutdown_token, config.AgentWebRoot)
+                    server = New EmberWebServer(agent, port, wwwroot, config.shutdown_token, config, config.AgentWebRoot)
                     Call server.Start()
                 Catch ex As InvalidOperationException
                     Call Console.Error.WriteLine($"[错误] {ex.Message}")

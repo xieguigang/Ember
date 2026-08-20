@@ -165,6 +165,20 @@
         </div>
     </div>
 
+    <!-- ==================== Web 密码锁覆盖层 ==================== -->
+    <!-- 仅当后台 settings.ini [web] enable_password=true 时由 app.js 显示；默认隐藏。 -->
+    <div class="lock-screen" id="lockScreen">
+        <div class="lock-card">
+            <div class="lock-avatar">🔥</div>
+            <h2 class="lock-title">Ember</h2>
+            <p class="lock-subtitle">需要密码才能进入</p>
+            <input type="password" class="lock-input" id="lockInput" placeholder="请输入访问密码"
+                autocomplete="current-password" spellcheck="false">
+            <button class="lock-btn" id="lockSubmit">进入</button>
+            <p class="lock-error" id="lockError"></p>
+        </div>
+    </div>
+
     <!-- ==================== 主题选择弹层 ==================== -->
     <div class="modal-mask hidden" id="themeModal">
         <div class="modal">
