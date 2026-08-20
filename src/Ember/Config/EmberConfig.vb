@@ -141,6 +141,17 @@ Namespace AgentRuntime
             End Get
         End Property
 
+        ''' <summary>
+        ''' 长期记忆归档文件路径（JSONL）。所有被上下文裁剪/压缩丢弃的对话会归档到此文件并建立全文索引，
+        ''' 使 LLM 能够通过 recall_longterm_memory 工具召回被遗忘的记忆。仅保存被丢弃的历史，活跃窗口仍存于 chat_history.json。
+        ''' </summary>
+        Public ReadOnly Property MemoryArchiveFilePath As String
+            Get
+                Return Path.Combine(DataDirectory, "memory_archive.jsonl")
+            End Get
+        End Property
+
+
         ''' <summary>主对话上下文日志文件（JSONL，由 ChatContextMemory 维护）</summary>
         Public ReadOnly Property ContextLogFilePath As String
             Get

@@ -2,6 +2,7 @@ Imports System.Text
 Imports System.Threading
 Imports Ember.AgentRuntime
 Imports Ollama
+Imports Ollama.JSON.FunctionCall
 
 ''' <summary>
 ''' 情感陪伴智能体核心编排器。
@@ -32,6 +33,12 @@ Public Class CompanionAgent : Implements IDisposable
 
     ''' <summary>画像总结时用于长期记忆检索的最近用户消息条数</summary>
     Private Const RECALL_KEYWORD_MESSAGES As Integer = 3
+
+    ''' <summary>recall_longterm_memory 工具单次最多召回的历史对话条数</summary>
+    Private Const RECALL_TOOL_TOP As Integer = 8
+
+    ''' <summary>recall_longterm_memory 工具结果中每条消息内容的最大字符数（超出截断，避免工具结果膨胀上下文）</summary>
+    Private Const RECALL_TOOL_MAXLEN As Integer = 800
 
     ''' <summary>
     ''' 并发互斥门（不可重入）：串行化对共享状态（记忆上下文/人设/画像/持久化）的全部访问。
@@ -168,11 +175,22 @@ Public Class CompanionAgent : Implements IDisposable
         _userTurnCount = 0
 
         ' 将持久化门面挂载到主对话客户端的上下文，并从文件恢复历史对话
-        _storage = New MemoryPersistsStorage(mainClient.Context, config.ChatHistoryFilePath)
+        _storage = New MemoryPersistsStorage(mainClient.Context, config.ChatHistoryFilePath, config.MemoryArchiveFilePath)
         Call _storage.Load()
+
+        ' 上下文裁剪/压缩丢弃的消息归档到长期记忆（进索引 + 落盘 memory_archive.jsonl）
+        mainClient.Context.OnEvict = AddressOf _storage.AddArchived
+
+        ' 注册长期记忆召回工具：LLM 发现用户提到的概念不在当前上下文时自主调用
+        _mainClient.AddFunction(
+            New FunctionModel("recall_longterm_memory",
+                "当用户提到的概念、人物、事件或关键词不在当前对话上下文中、需要回忆更早的聊天记忆时调用。输入用户提到的关键词或短语，返回相关的历史对话片段，用于连贯地继续对话。",
+                New ParameterProperties("query", "用户提到的、当前上下文中不存在的概念、人名、事件或关键词")),
+            AddressOf RecallToolHandler)
 
         Call RefreshSystemPrompt()
     End Sub
+
 
     ''' <summary>
     ''' 创建智能体实例：构造主/总结双客户端，加载人设、画像与对话历史。
@@ -587,6 +605,49 @@ Public Class CompanionAgent : Implements IDisposable
             ' 长期记忆召回是增强项，失败不应影响画像总结主流程
             Call Console.Error.WriteLine($"[记忆召回失败] {ex.Message}")
             Return New ChatMessage() {}
+        End Try
+    End Function
+
+    ''' <summary>
+    ''' recall_longterm_memory 工具的处理体：从长期记忆（含被上下文裁剪/压缩丢弃、已归档的对话）中
+    ''' 模糊召回与用户提到的概念相关的历史对话片段，结果作为 tool 消息回填主对话上下文，供 LLM 连贯回答。
+    ''' 当未找到相关记忆时返回明确提示，由 LLM 凭自身理解继续回答。
+    ''' </summary>
+    Private Function RecallToolHandler(fc As FunctionCall) As String
+        Try
+            Dim query As String = If(fc?.arguments?.TryGetValue("query"), String.Empty)
+
+            If String.IsNullOrWhiteSpace(query) Then
+                Return "未提供有效的查询关键词。"
+            End If
+
+            Dim hits = _storage.RecallMessages({query}, top:=RECALL_TOOL_TOP).ToArray()
+
+            If hits.Length = 0 Then
+                Return "未在长期记忆中找到与「" & query.Trim() & "」相关的内容。"
+            End If
+
+            Dim sb As New StringBuilder()
+            Call sb.AppendLine($"以下是从长期记忆中找回的、与「{query.Trim()}」相关的历史对话片段：")
+
+            For i As Integer = 0 To hits.Length - 1
+                Dim m As ChatMessage = hits(i)
+                Dim roleLabel As String = If(m.Role, "unknown")
+                Dim content As String = If(m.Content, String.Empty)
+
+                ' 长内容截断，避免工具结果膨胀上下文
+                If content.Length > RECALL_TOOL_MAXLEN Then
+                    content = content.Substring(0, RECALL_TOOL_MAXLEN) & "…"
+                End If
+
+                Call sb.AppendLine()
+                Call sb.AppendLine($"[{i + 1}] {roleLabel}: {content}")
+            Next
+
+            Return sb.ToString().Trim()
+        Catch ex As Exception
+            Call Console.Error.WriteLine($"[长期记忆召回工具失败] {ex.Message}")
+            Return "回忆时发生了错误，请凭你自己的理解回答。"
         End Try
     End Function
 
