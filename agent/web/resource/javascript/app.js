@@ -1122,7 +1122,7 @@ async function generateDiary(regen = false) {
       toast("今天还没有可写进日记的对话内容");
     }
   } catch (e) {
-    toast(`日记生成失败：${e.message}`, true);
+    toast(e.message, true);
   } finally {
     els.writeDiaryBtn.disabled = false;
     els.writeDiaryBtn.textContent = "✍️ 写日记";

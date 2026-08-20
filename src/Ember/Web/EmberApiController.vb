@@ -580,8 +580,7 @@ Namespace Web
 
                 Dim entry As DiaryEntry = _agent.WriteDiaryAsync().GetAwaiter().GetResult()
                 If entry Is Nothing Then
-                    Call response.WriteJSON(Envelope(New DiaryGenerateResult With {
-                        .ok = False, .[date] = Date.Today.ToString("yyyy-MM-dd")}, 400))
+                    Call response.WriteJSON(Envelope("[系统] 今天还没有对话内容，暂无日记可写。", 400))
                 Else
                     Call response.WriteJSON(Envelope(New DiaryGenerateResult With {
                         .ok = True, .[date] = entry.[date], .id = entry.id}))
