@@ -484,6 +484,120 @@ const postJSON = (path, body) =>
   api(path, { method: "POST", body: JSON.stringify(body || {}) });
 
 /* ============================================================
+   密码锁（Web 前端安全）：仅在后台 enable_password=true 时启用
+   - 启动先查询 /api/info 是否启用密码
+   - 启用时显示全屏锁屏，用户输入密码 POST /api/unlock 换取会话令牌
+   - 之后所有 api() 请求自动携带 X-Access-Token（见 api()）
+   - 提示：纯 HTTP 下令牌可被嗅探，公网部署建议前置 HTTPS 反向代理
+   ============================================================ */
+let sessionToken = ""; // 解锁成功后由后端返回的会话令牌；空=未解锁
+let lockResolver = null; // ensureUnlocked 的 Promise resolve，解锁成功后调用
+let passwordEnabled = false;
+
+// 查询后端是否启用密码锁；未启用直接放行，启用则显示锁屏并等待解锁
+async function ensureUnlocked() {
+  let info;
+  try {
+    info = await getJSON("/api/info");
+  } catch (e) {
+    // 无法获取 info（网络/服务异常）时保守放行，避免锁死整个界面
+    console.warn("[lock] 获取 /api/info 失败，按未启用密码锁处理：", e);
+    return;
+  }
+  passwordEnabled = !!(info && info.passwordEnabled);
+  if (!passwordEnabled) {
+    hideLockScreen();
+    return;
+  }
+  // 启用：显示锁屏并阻塞初始化，直到用户成功解锁
+  showLockScreen();
+  await new Promise((resolve) => {
+    lockResolver = resolve;
+  });
+}
+
+function showLockScreen(msg) {
+  if (els.lockScreen.classList.contains("lock-hide")) {
+    els.lockScreen.classList.remove("lock-hide");
+  }
+  els.lockScreen.classList.add("active");
+  if (msg) {
+    els.lockError.textContent = msg;
+    els.lockError.classList.add("show");
+  }
+  els.lockInput.value = "";
+  els.lockInput.focus();
+}
+
+// 解锁成功：保存令牌，淡出锁屏，放行被阻塞的初始化
+function unlockSucceeded(token) {
+  sessionToken = token || "";
+  hideLockScreen();
+  if (lockResolver) {
+    const r = lockResolver;
+    lockResolver = null;
+    r();
+  }
+}
+
+function hideLockScreen() {
+  els.lockScreen.classList.remove("active");
+  els.lockScreen.classList.add("lock-hide");
+  // 淡出结束后彻底移除激活态，避免遮挡点击
+  setTimeout(() => {
+    if (!els.lockScreen.classList.contains("active")) {
+      els.lockScreen.classList.remove("lock-hide");
+    }
+  }, 480);
+}
+
+// 用户提交密码：POST /api/unlock 校验，成功则解锁，失败提示错误
+async function submitUnlock() {
+  const pwd = els.lockInput.value || "";
+  if (!pwd) {
+    showLockError("请输入密码");
+    return;
+  }
+  els.lockSubmit.disabled = true;
+  try {
+    const res = await fetch("/api/unlock", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: "password=" + encodeURIComponent(pwd),
+    });
+    if (res.status === 401) {
+      showLockError("密码不正确，请重试");
+      shakeLockInput();
+      return;
+    }
+    if (!res.ok) {
+      showLockError("解锁失败，请稍后重试");
+      return;
+    }
+    const data = await res.json();
+    if (data.code !== 0 || !data.info || !data.info.token) {
+      showLockError("解锁失败，请稍后重试");
+      return;
+    }
+    unlockSucceeded(data.info.token);
+  } catch (e) {
+    showLockError("网络异常，无法解锁");
+  } finally {
+    els.lockSubmit.disabled = false;
+  }
+}
+
+function showLockError(msg) {
+  els.lockError.textContent = msg;
+  els.lockError.classList.add("show");
+}
+function shakeLockInput() {
+  els.lockInput.classList.remove("shake");
+  void els.lockInput.offsetWidth; // 重启动画
+  els.lockInput.classList.add("shake");
+}
+
+/* ============================================================
    工具函数
    ============================================================ */
 function toast(msg, isError = false) {
@@ -1182,6 +1296,21 @@ function autoGrow() {
    事件绑定
    ============================================================ */
 function bindEvents() {
+  // 密码锁：解锁按钮与回车提交
+  els.lockSubmit.addEventListener("click", submitUnlock);
+  els.lockInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      submitUnlock();
+    }
+  });
+  els.lockInput.addEventListener("input", () => {
+    if (els.lockError.classList.contains("show")) {
+      els.lockError.classList.remove("show");
+      els.lockInput.classList.remove("shake");
+    }
+  });
+
   // 发送
   els.sendBtn.addEventListener("click", sendMessage);
   els.inputBox.addEventListener("keydown", (e) => {

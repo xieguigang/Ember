@@ -2027,7 +2027,7 @@ body {
   position: fixed;
   inset: 0;
   z-index: 1000;
-  display: flex;
+  display: none;
   align-items: center;
   justify-content: center;
   padding: 20px;
@@ -2039,10 +2039,15 @@ body {
     );
   backdrop-filter: blur(14px) saturate(120%);
   -webkit-backdrop-filter: blur(14px) saturate(120%);
+}
+/* 激活显示 */
+.lock-screen.active {
+  display: flex;
   animation: lockFadeIn 0.4s ease;
 }
 /* 解锁成功后淡出移除 */
 .lock-screen.lock-hide {
+  display: flex;
   animation: lockFadeOut 0.45s ease forwards;
   pointer-events: none;
 }
