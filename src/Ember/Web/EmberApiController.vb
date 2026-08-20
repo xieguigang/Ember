@@ -166,6 +166,7 @@ Namespace Web
         Public Sub SetPersona(request As HttpRequest, response As HttpResponse)
             Try
                 Call AllowCors(response)
+                If Not RequireValidToken(request, response) Then Return
 
                 Dim description As String = ReadPostField(request, "description")
                 If String.IsNullOrWhiteSpace(description) Then
@@ -184,6 +185,7 @@ Namespace Web
         Public Sub ResetPersona(request As HttpRequest, response As HttpResponse)
             Try
                 Call AllowCors(response)
+                If Not RequireValidToken(request, response) Then Return
                 Call _agent.ResetPersonaAsync().GetAwaiter().GetResult()
                 Call response.WriteJSON(Envelope(New OkResult With {.ok = True}))
             Catch ex As Exception
@@ -197,6 +199,7 @@ Namespace Web
         Public Sub GetProfile(request As HttpRequest, response As HttpResponse)
             Try
                 Call AllowCors(response)
+                If Not RequireValidToken(request, response) Then Return
                 Dim snapshot As ProfileSnapshot = _agent.GetProfileSnapshotAsync().GetAwaiter().GetResult()
                 Call response.WriteJSON(Envelope(snapshot))
             Catch ex As Exception
@@ -208,6 +211,7 @@ Namespace Web
         Public Sub RefreshProfile(request As HttpRequest, response As HttpResponse)
             Try
                 Call AllowCors(response)
+                If Not RequireValidToken(request, response) Then Return
                 Dim updated As Boolean = _agent.UpdateProfileAsync().GetAwaiter().GetResult()
                 Call response.WriteJSON(Envelope(New ProfileRefreshResult With {.updated = updated}))
             Catch ex As Exception
@@ -221,6 +225,7 @@ Namespace Web
         Public Sub GetHistory(request As HttpRequest, response As HttpResponse)
             Try
                 Call AllowCors(response)
+                If Not RequireValidToken(request, response) Then Return
 
                 Dim limit As Integer = 50
                 If request.URL.query.ContainsKey("limit") Then
@@ -239,6 +244,7 @@ Namespace Web
         Public Sub Chat(request As HttpRequest, response As HttpResponse)
             Try
                 Call AllowCors(response)
+                If Not RequireValidToken(request, response) Then Return
 
                 Dim message As String = ReadPostField(request, "message")
                 If String.IsNullOrWhiteSpace(message) Then
@@ -272,6 +278,7 @@ Namespace Web
         Public Sub GetLiveChat(request As HttpRequest, response As HttpResponse)
             Try
                 Call AllowCors(response)
+                If Not RequireValidToken(request, response) Then Return
                 Dim snapshot As LiveChatSnapshot = _agent.GetLiveChatSnapshot()
                 Call response.WriteJSON(Envelope(snapshot))
             Catch ex As Exception
@@ -287,6 +294,7 @@ Namespace Web
         Public Sub GetAvatars(request As HttpRequest, response As HttpResponse)
             Try
                 Call AllowCors(response)
+                If Not RequireValidToken(request, response) Then Return
 
                 Dim list As New AvatarListResult With {
                     .urlPrefix = "/resource/images/avatars/",
@@ -346,6 +354,7 @@ Namespace Web
         Public Sub Tts(request As HttpRequest, response As HttpResponse)
             Try
                 Call AllowCors(response)
+                If Not RequireValidToken(request, response) Then Return
 
                 Dim text As String = ""
                 If request.URL.query.ContainsKey("text") Then
@@ -517,6 +526,7 @@ Namespace Web
         Public Sub ListDiaries(request As HttpRequest, response As HttpResponse)
             Try
                 Call AllowCors(response)
+                If Not RequireValidToken(request, response) Then Return
                 Dim diaries As List(Of DiaryEntry) = _agent.ListDiariesAsync().GetAwaiter().GetResult()
                 Dim result As New DiaryListResult With {.diaries = diaries}
                 Call response.WriteJSON(Envelope(result))
@@ -532,6 +542,7 @@ Namespace Web
         Public Sub GetDiary(request As HttpRequest, response As HttpResponse)
             Try
                 Call AllowCors(response)
+                If Not RequireValidToken(request, response) Then Return
 
                 Dim [date] As String = ""
                 If request.URL.query.ContainsKey("date") Then
@@ -559,6 +570,7 @@ Namespace Web
         Public Sub GenerateDiary(request As HttpRequest, response As HttpResponse)
             Try
                 Call AllowCors(response)
+                If Not RequireValidToken(request, response) Then Return
 
                 Dim entry As DiaryEntry = _agent.WriteDiaryAsync().GetAwaiter().GetResult()
                 If entry Is Nothing Then
@@ -579,6 +591,7 @@ Namespace Web
         Public Sub Save(request As HttpRequest, response As HttpResponse)
             Try
                 Call AllowCors(response)
+                If Not RequireValidToken(request, response) Then Return
                 Call _agent.SaveAllAsync().GetAwaiter().GetResult()
                 Call response.WriteJSON(Envelope(New OkResult With {.ok = True}))
             Catch ex As Exception
