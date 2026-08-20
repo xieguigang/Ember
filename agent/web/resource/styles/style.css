@@ -1714,6 +1714,42 @@ body {
   white-space: pre-wrap;
 }
 
+/* 多篇日记共存时的分隔与标记 */
+.diary-article {
+  padding-bottom: 4px;
+}
+.diary-index {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--p1);
+  margin-left: 8px;
+  padding: 1px 8px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  vertical-align: middle;
+}
+.diary-count {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--p1);
+  margin-left: 6px;
+  padding: 1px 7px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  vertical-align: middle;
+}
+.diary-sep {
+  border: none;
+  height: 1px;
+  margin: 20px 0;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--line-strong),
+    transparent
+  );
+}
+
 /* ============================================================
    告别界面
    ============================================================ */

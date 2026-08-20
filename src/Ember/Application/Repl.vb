@@ -194,11 +194,17 @@ Namespace Application
                     If subArg.Length = 0 Then
                         Call Console.WriteLine("用法：/diary show yyyy-MM-dd（日期可用 /diary list 查询）")
                     Else
-                        Dim entry As DiaryEntry = Await agent.GetDiaryAsync(subArg)
-                        If entry Is Nothing Then
+                        Dim entries As List(Of DiaryEntry) = Await agent.GetDiaryAllAsync(subArg)
+                        If entries Is Nothing OrElse entries.Count = 0 Then
                             Call Console.WriteLine($"[系统] {subArg} 没有日记。")
                         Else
-                            Call PrintDiary(entry)
+                            Call Console.WriteLine($"[{subArg}] 共 {entries.Count} 篇日记（最新在前）：")
+                            Dim idx As Integer = 1
+                            For Each e As DiaryEntry In entries
+                                Call Console.WriteLine($"----- 第 {idx} 篇 -----")
+                                Call PrintDiary(e)
+                                idx += 1
+                            Next
                         End If
                     End If
 

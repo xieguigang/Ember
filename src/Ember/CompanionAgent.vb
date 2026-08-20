@@ -478,6 +478,7 @@ Public Class CompanionAgent : Implements IDisposable
             If body.Length = 0 Then body = text.Trim()
 
             entry = New DiaryEntry With {
+                .id = DateTime.Now.ToString("yyyyMMddHHmmssfff"),
                 .[date] = _today,
                 .title = If(title.Length = 0, $"{Date.Today.Month}月{Date.Today.Day}日的陪伴日记", title),
                 .content = body,
@@ -500,7 +501,8 @@ Public Class CompanionAgent : Implements IDisposable
     End Function
 
     ''' <summary>
-    ''' 读取指定日期的日记（经 <see cref="_gate"/> 互斥）；不存在返回 Nothing。
+    ''' 读取指定日期的日记（经 <see cref="_gate"/> 互斥）；默认返回该日最新一篇（保持"今日查看"语义）。
+    ''' 不存在返回 Nothing。
     ''' </summary>
     ''' <param name="[date]">日记日期（yyyy-MM-dd）；空串或缺省取今日</param>
     Public Async Function GetDiaryAsync(Optional [date] As String = Nothing) As Task(Of DiaryEntry)
@@ -510,6 +512,23 @@ Public Class CompanionAgent : Implements IDisposable
                 [date] = Date.Today.ToString(DiaryStore.DATE_FORMAT)
             End If
             Return DiaryStore.Load(_config.DiaryDir, [date].Trim())
+        Finally
+            Call _gate.Release()
+        End Try
+    End Function
+
+    ''' <summary>
+    ''' 读取指定日期的全部日记（多篇，按生成时间倒序）；供 API / 前端阅读器使用。
+    ''' 不存在或为空返回空列表。
+    ''' </summary>
+    ''' <param name="[date]">日记日期（yyyy-MM-dd）；空串或缺省取今日</param>
+    Public Async Function GetDiaryAllAsync(Optional [date] As String = Nothing) As Task(Of List(Of DiaryEntry))
+        Await _gate.WaitAsync()
+        Try
+            If String.IsNullOrWhiteSpace([date]) Then
+                [date] = Date.Today.ToString(DiaryStore.DATE_FORMAT)
+            End If
+            Return DiaryStore.LoadAll(_config.DiaryDir, [date].Trim())
         Finally
             Call _gate.Release()
         End Try

@@ -537,6 +537,7 @@ Namespace Web
 
         ''' <summary>
         ''' 读取指定日期的日记（query 参数 date=yyyy-MM-dd，缺省今日）。
+        ''' 返回该日全部日记（entries，多篇按生成时间倒序）；同时以最新一篇填充 title/content/generatedAt，兼容旧前端。
         ''' </summary>
         <HttpGet("/api/diary")>
         Public Sub GetDiary(request As HttpRequest, response As HttpResponse)
@@ -549,14 +550,19 @@ Namespace Web
                     [date] = request.URL.query("date").ElementAtOrNull(Scan0)
                 End If
 
-                Dim entry As DiaryEntry = _agent.GetDiaryAsync([date]).GetAwaiter().GetResult()
+                Dim entries As List(Of DiaryEntry) = _agent.GetDiaryAllAsync([date]).GetAwaiter().GetResult()
+                Dim latest As DiaryEntry = If(entries IsNot Nothing AndAlso entries.Count > 0,
+                                              entries.OrderByDescending(Function(e) e.generatedAt).First(),
+                                              Nothing)
+
                 Dim result As New DiaryResult With {
-                    .exists = entry IsNot Nothing,
-                    .[date] = If(entry?.[date], If([date], "")),
-                    .title = If(entry?.title, ""),
-                    .content = If(entry?.content, ""),
-                    .generatedAt = If(entry?.generatedAt, "")
+                    .exists = latest IsNot Nothing,
+                    .[date] = If(latest?.[date], If([date], "")),
+                    .title = If(latest?.title, ""),
+                    .content = If(latest?.content, ""),
+                    .generatedAt = If(latest?.generatedAt, "")
                 }
+                If entries IsNot Nothing Then result.entries = entries
                 Call response.WriteJSON(Envelope(result))
             Catch ex As Exception
                 Call Fail(response, ex)
@@ -578,7 +584,7 @@ Namespace Web
                         .ok = False, .[date] = Date.Today.ToString("yyyy-MM-dd")}, 400))
                 Else
                     Call response.WriteJSON(Envelope(New DiaryGenerateResult With {
-                        .ok = True, .[date] = entry.[date]}))
+                        .ok = True, .[date] = entry.[date], .id = entry.id}))
                 End If
             Catch ex As Exception
                 Call Fail(response, ex)

@@ -229,7 +229,9 @@ function playReplyTts(text, replayBtn) {
     statusEl.querySelector(".tts-wave").style.display = "none";
 
     const url = `/api/tts?text=${encodeURIComponent(seg)}`;
-    fetch(url)
+    const headers = {};
+    if (sessionToken) headers["X-Access-Token"] = sessionToken;
+    fetch(url, { headers })
       .then((r) => {
         if (!r.ok) throw new Error("tts_http_" + r.status);
         return r.blob();
@@ -999,9 +1001,14 @@ async function loadDiaryCard() {
   try {
     const d = await getJSON("/api/diary");
     els.diaryDateBadge.textContent = todayStr();
+    const entries = d.entries && d.entries.length ? d.entries : null;
     if (d.exists) {
+      const countTip =
+        entries && entries.length > 1
+          ? `<span class="diary-count">今日 ${entries.length} 篇</span>`
+          : "";
       els.diaryBody.innerHTML =
-        `<p class="diary-title">《${escapeHtml(d.title)}》</p>` +
+        `<p class="diary-title">《${escapeHtml(d.title)}》${countTip}</p>` +
         `<p class="diary-excerpt">${escapeHtml(d.content)}</p>`;
     } else {
       els.diaryBody.innerHTML =
@@ -1038,7 +1045,7 @@ async function loadDiaryList(selectedDate) {
         "diary-item" +
         (d.date === (selectedDate || todayStr()) ? " active" : "");
       item.innerHTML =
-        `<div class="diary-item-date">📅 ${escapeHtml(d.date)}</div>` +
+        `<div class="diary-item-date">📅 ${escapeHtml(d.date)}${d.generatedAt ? ` · ${escapeHtml(d.generatedAt.slice(11))}` : ""}</div>` +
         `<div class="diary-item-title">${escapeHtml(d.title || "（无标题）")}</div>`;
       item.addEventListener("click", () => loadDiaryContent(d.date));
       els.diaryListPane.appendChild(item);
@@ -1069,11 +1076,22 @@ async function loadDiaryContent(date) {
   els.diaryReader.innerHTML = '<p class="profile-empty">翻开的这一页…</p>';
   try {
     const d = await getJSON(`/api/diary?date=${encodeURIComponent(date)}`);
-    if (d.exists) {
-      els.diaryReader.innerHTML =
-        `<h3>《${escapeHtml(d.title)}》</h3>` +
-        `<div class="diary-meta">📅 ${escapeHtml(d.date)} · 写于 ${escapeHtml(d.generatedAt)}</div>` +
-        `<div class="diary-content">${escapeHtml(d.content)}</div>`;
+    const entries = d.entries && d.entries.length ? d.entries : null;
+
+    if (d.exists && entries) {
+      const parts = entries.map((entry, i) => {
+        const meta =
+          `<div class="diary-meta">📅 ${escapeHtml(entry.date || d.date)} · 写于 ${escapeHtml(entry.generatedAt || "")}</div>`;
+        const body =
+          `<div class="diary-content">${escapeHtml(entry.content || "")}</div>`;
+        // 多篇时加序号与分隔（最新一篇在前，序号按时间正序更直观，这里按列表顺序）
+        const head =
+          entries.length > 1
+            ? `<h3>《${escapeHtml(entry.title || "（无标题）")}》<span class="diary-index">第 ${i + 1} 篇</span></h3>`
+            : `<h3>《${escapeHtml(entry.title || "（无标题）")}》</h3>`;
+        return `<article class="diary-article">${head}${meta}${body}</article>`;
+      });
+      els.diaryReader.innerHTML = parts.join('<hr class="diary-sep">');
       els.diaryReader.scrollTop = 0;
     } else {
       els.diaryReader.innerHTML = `<p class="profile-empty">${escapeHtml(date)} 这一天没有日记</p>`;

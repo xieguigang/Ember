@@ -27,18 +27,27 @@
 
     ''' <summary>日记读取结果（GET /api/diary 响应体）。</summary>
     Public Class DiaryResult
-        ''' <summary>指定日期的日记是否存在</summary>
+        ''' <summary>指定日期的日记（当日多篇）是否存在</summary>
         Public Property exists As Boolean
+        ''' <summary>指定日期（yyyy-MM-dd）</summary>
         Public Property [date] As String = ""
+        ''' <summary>该日最新一篇的标题（兼容旧前端/REPL）</summary>
         Public Property title As String = ""
+        ''' <summary>该日最新一篇的正文（兼容旧前端/REPL）</summary>
         Public Property content As String = ""
+        ''' <summary>该日最新一篇的生成时间（兼容旧前端/REPL）</summary>
         Public Property generatedAt As String = ""
+        ''' <summary>该日全部日记（多篇，按生成时间倒序）；前端阅读器顺序渲染</summary>
+        Public Property entries As New List(Of DiaryEntry)
     End Class
 
     ''' <summary>日记生成结果（POST /api/diary/generate 响应体）。</summary>
     Public Class DiaryGenerateResult
         Public Property ok As Boolean
+        ''' <summary>生成日记的日期（yyyy-MM-dd）</summary>
         Public Property [date] As String = ""
+        ''' <summary>新生成日记的唯一 id（便于前端定位/高亮）</summary>
+        Public Property id As String = ""
     End Class
 
     ''' <summary>Web 前端启动信息（GET /api/info 响应体）。</summary>
