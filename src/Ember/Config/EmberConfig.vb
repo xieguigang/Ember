@@ -93,6 +93,19 @@ Namespace AgentRuntime
         ''' </summary>
         Public Property tts_language As String = "zh"
 
+        ''' <summary>
+        ''' Web 前端密码锁开关：true 时启用，用户在进入 Web 聊天界面前必须输入正确密码（web_password）换取会话令牌，
+        ''' 之后所有 /api/* 请求携带该令牌由后端统一鉴权；false（默认）时不启用，前端行为与旧版完全一致（向后兼容）。
+        ''' 配合反向代理 HTTPS 可安全将服务暴露到公网。
+        ''' </summary>
+        Public Property enable_password As Boolean = False
+
+        ''' <summary>
+        ''' Web 前端密码锁密码：enable_password 为 true 时生效，用户输入需与此值一致方可解锁。
+        ''' 注意：明文存储在 settings.ini 中，请使用强口令并妥善保管配置文件；建议配合 HTTPS 避免传输嗅探。
+        ''' </summary>
+        Public Property web_password As String = ""
+
         ' ==================== 派生路径（运行时数据落盘位置） ====================
 
         ''' <summary>配置文件绝对路径</summary>
@@ -271,6 +284,8 @@ Namespace AgentRuntime
                 avatar_dir = ini.ReadString(SECTION_WEB, NameOf(avatar_dir), avatar_dir)
                 tts_url = ini.ReadString(SECTION_WEB, NameOf(tts_url), tts_url)
                 tts_language = ini.ReadString(SECTION_WEB, NameOf(tts_language), tts_language)
+                enable_password = ini.ReadBoolean(SECTION_WEB, NameOf(enable_password), enable_password)
+                web_password = ini.ReadString(SECTION_WEB, NameOf(web_password), web_password)
             End Using
 
             ' 数值参数合法性保护
@@ -349,6 +364,8 @@ Namespace AgentRuntime
                 Call ini.WriteValue(SECTION_WEB, NameOf(avatar_dir), "", "头像图片目录：Web 头像选择列表的扫描来源；留空则自动探测（向上查找 agent\\web\\resource\\images\\avatars）")
                 Call ini.WriteValue(SECTION_WEB, NameOf(tts_url), "http://127.0.0.1:9880/", "本地 TTS 语音合成服务地址（返回 wav 音频流）；Web 经后端 /api/tts 同代理访问以规避跨域，地址需带结尾斜杠")
                 Call ini.WriteValue(SECTION_WEB, NameOf(tts_language), "zh", "转发给 TTS 服务的语言参数（对应 text_language 查询参数）")
+                Call ini.WriteValue(SECTION_WEB, NameOf(enable_password), "false", "Web 前端密码锁开关：true 时进入聊天界面前需输入密码（web_password）换取令牌，全接口鉴权；false 关闭（默认）")
+                Call ini.WriteValue(SECTION_WEB, NameOf(web_password), "", "Web 前端密码锁密码；enable_password 为 true 时生效。明文保存，请使用强口令并配合 HTTPS 部署")
 
                 Call ini.Flush()
             End Using

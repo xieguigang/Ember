@@ -5,6 +5,7 @@ Imports Flute.Http.Core
 Imports Flute.Http.Core.Message
 Imports Flute.Http.Core.Message.HttpHeader
 Imports Microsoft.VisualBasic.Net.Http
+Imports AgentRuntime
 
 Namespace Web
 
@@ -29,15 +30,23 @@ Namespace Web
         Private Shared ReadOnly AVATAR_EXTENSIONS As String() = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
 
         ReadOnly _agent As CompanionAgent
+        ReadOnly _config As EmberConfig
 
-        Sub New(agent As CompanionAgent)
+        ' 进程内会话令牌字典：解锁成功后写入 token → true；校验时查表。
+        ' 单实例 Agent 服务使用内存字典即可，重启即失效，避免密码落盘风险。
+        ReadOnly _tokens As New HashSet(Of String)
+
+        Sub New(agent As CompanionAgent, config As EmberConfig)
             _agent = agent
+            _config = config
         End Sub
 
         ' ==================== 状态 ====================
 
         <HttpGet("/api/status")>
         Public Sub GetStatus(request As HttpRequest, response As HttpResponse)
+            ' 受密码锁保护：未解锁一律 401
+            If Not RequireValidToken(request, response) Then Return
             Try
                 Call AllowCors(response)
                 Dim snapshot As AgentStatusSnapshot = _agent.GetStatusSnapshotAsync().GetAwaiter().GetResult()
@@ -47,12 +56,105 @@ Namespace Web
             End Try
         End Sub
 
+        ' ==================== 密码锁 ====================
+
+        ''' <summary>
+        ''' 前端启动信息（免 token 校验）：返回是否启用密码锁、模型、后端类型与智能体名称。
+        ''' 注意：绝不返回密码或密码哈希，避免明文/哈希泄露。
+        ''' </summary>
+        <HttpGet("/api/info")>
+        Public Sub GetInfo(request As HttpRequest, response As HttpResponse)
+            Try
+                Call AllowCors(response)
+
+                Dim persona As PersonaSnapshot = _agent.GetPersonaSnapshotAsync().GetAwaiter().GetResult()
+                Dim status As AgentStatusSnapshot = _agent.GetStatusSnapshotAsync().GetAwaiter().GetResult()
+
+                Dim info As New InfoResult With {
+                    .passwordEnabled = _config.enable_password,
+                    .model = status.model,
+                    .provider = _config.provider,
+                    .agentName = persona.name
+                }
+                Call response.WriteJSON(Envelope(info))
+            Catch ex As Exception
+                Call Fail(response, ex)
+            End Try
+        End Sub
+
+        ''' <summary>
+        ''' 解锁端点（免 token 校验）：校验密码，成功返回一次性会话令牌。
+        ''' 前端凭此令牌在后续 /api/* 请求中通过 X-Access-Token 头携带。
+        ''' </summary>
+        <HttpPost("/api/unlock")>
+        Public Sub Unlock(request As HttpRequest, response As HttpResponse)
+            Try
+                Call AllowCors(response)
+
+                If Not _config.enable_password Then
+                    ' 未启用密码锁时直接放行（返回空令牌，前端也可忽略）
+                    Call response.WriteJSON(Envelope(New UnlockResult With {.token = ""}))
+                    Return
+                End If
+
+                Dim password As String = ReadPostField(request, "password")
+
+                If password = _config.web_password Then
+                    Dim token As String = Guid.NewGuid().ToString("N")
+                    SyncLock _tokens
+                        Call _tokens.Add(token)
+                    End SyncLock
+                    Call response.WriteJSON(Envelope(New UnlockResult With {.token = token}))
+                Else
+                    ' 密码错误：返回 401，前端退回锁屏并提示
+                    Call response.WriteJSON(Envelope("密码不正确", 401))
+                End If
+            Catch ex As Exception
+                Call Fail(response, ex)
+            End Try
+        End Sub
+
+        ''' <summary>
+        ''' 统一会话令牌校验：读取 X-Access-Token 头，校验是否已在解锁字典中。
+        ''' 仅当启用密码锁（_config.enable_password = true）时才强制校验；
+        ''' 未启用时直接放行，保持向后兼容。校验失败写 401 并返回 False。
+        ''' </summary>
+        Private Function RequireValidToken(request As HttpRequest, response As HttpResponse) As Boolean
+            Call AllowCors(response)
+
+            ' 未启用密码锁：不强制鉴权
+            If Not _config.enable_password Then Return True
+
+            Dim token As String = ""
+            If request.headers IsNot Nothing AndAlso request.headers.ContainsKey("X-Access-Token") Then
+                token = request.headers("X-Access-Token")
+            End If
+
+            If String.IsNullOrWhiteSpace(token) Then
+                Call response.WriteJSON(Envelope("需要密码解锁", 401))
+                Return False
+            End If
+
+            Dim valid As Boolean
+            SyncLock _tokens
+                valid = _tokens.Contains(token)
+            End SyncLock
+
+            If Not valid Then
+                Call response.WriteJSON(Envelope("会话已失效，请重新解锁", 401))
+                Return False
+            End If
+
+            Return True
+        End Function
+
         ' ==================== 人设 ====================
 
         <HttpGet("/api/persona")>
         Public Sub GetPersona(request As HttpRequest, response As HttpResponse)
             Try
                 Call AllowCors(response)
+                If Not RequireValidToken(request, response) Then Return
                 Dim snapshot As PersonaSnapshot = _agent.GetPersonaSnapshotAsync().GetAwaiter().GetResult()
                 Call response.WriteJSON(Envelope(snapshot))
             Catch ex As Exception

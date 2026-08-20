@@ -40,4 +40,22 @@
         Public Property ok As Boolean
         Public Property [date] As String = ""
     End Class
+
+    ''' <summary>Web 前端启动信息（GET /api/info 响应体）。</summary>
+    Public Class InfoResult
+        ''' <summary>是否启用密码锁；true 时前端必须先 /api/unlock 换取令牌再访问其他接口</summary>
+        Public Property passwordEnabled As Boolean
+        ''' <summary>当前对话模型名称（用于前端展示）</summary>
+        Public Property model As String = ""
+        ''' <summary>LLM 后端类型描述（ollama / openai）</summary>
+        Public Property provider As String = ""
+        ''' <summary>智能体名称（人设标题），空时前端回退默认</summary>
+        Public Property agentName As String = ""
+    End Class
+
+    ''' <summary>解锁响应（POST /api/unlock 响应体）；成功时携带一次性会话令牌。</summary>
+    Public Class UnlockResult
+        ''' <summary>会话令牌（GUID 字符串）；后续请求通过 X-Access-Token 头携带</summary>
+        Public Property token As String = ""
+    End Class
 End Namespace
