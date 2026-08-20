@@ -126,8 +126,8 @@ Namespace Web
             If Not _config.enable_password Then Return True
 
             Dim token As String = ""
-            If request.headers IsNot Nothing AndAlso request.headers.ContainsKey("X-Access-Token") Then
-                token = request.headers("X-Access-Token")
+            If request.HttpHeaders IsNot Nothing AndAlso request.HttpHeaders.ContainsKey("X-Access-Token") Then
+                token = request.HttpHeaders("X-Access-Token")
             End If
 
             If String.IsNullOrWhiteSpace(token) Then

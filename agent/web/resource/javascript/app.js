@@ -459,7 +459,7 @@ async function api(path, options = {}) {
   const resp = await fetch(path, { headers, ...options });
 
   // 401：会话失效（令牌过期 / 未解锁），退回锁屏
-  if (resp.status === 401 && els.lockScreen && !els.lockScreen.classList.contains("lock-hide")) {
+  if (resp.status === 401 && els.lockScreen && !els.lockScreen.classList.contains("active")) {
     showLockScreen("会话已失效，请重新输入密码");
   }
 
@@ -1421,11 +1421,12 @@ async function init() {
   initTts();
   ensureWelcomeAvatarStructure();
   bindEvents();
-  await loadAvatars();
 
-  // 密码锁前置检查：未启用则跳过；启用则需先解锁再加载数据
+  // 密码锁前置检查：未启用则跳过；启用则需先解锁再加载数据。
+  // 必须在任何 /api/* 请求之前完成，避免未携带令牌导致 401。
   await ensureUnlocked();
 
+  await loadAvatars();
   await Promise.allSettled([
     loadPersona(),
     loadProfile(),
