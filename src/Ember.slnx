@@ -29,4 +29,5 @@
   <Project Path="Ember/Ember.vbproj">
     <Platform Solution="*|x64" Project="x64" />
   </Project>
+  <Project Path="EmberDesktop/EmberDesktop.vbproj" Id="6df71f2c-96c9-452e-a5d2-ba565212a01f" />
 </Solution>
