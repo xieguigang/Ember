@@ -1,4 +1,5 @@
-﻿Imports Microsoft.VisualBasic.Data.IO.MessagePack
+﻿Imports System.IO
+Imports Microsoft.VisualBasic.Data.IO.MessagePack
 Imports Microsoft.VisualBasic.Data.IO.MessagePack.Serialization
 Imports Ollama
 
@@ -22,4 +23,12 @@ Public Class MessageSchema : Inherits SchemaProvider(Of ChatMessage)
             {NameOf(ToolCallInfo.FunctionArguments), NilImplication.Null}
         })
     End Function
+
+    Public Shared Function LoadChatData(s As Stream) As ChatMessage()
+        Return MsgPackSerializer.Deserialize(Of ChatMessage())(s)
+    End Function
+
+    Public Shared Sub Save(context As IEnumerable(Of ChatMessage), s As Stream)
+        Call MsgPackSerializer.SerializeObject(context.ToArray, s)
+    End Sub
 End Class
