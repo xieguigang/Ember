@@ -2,6 +2,6 @@
 
 set host="bin\Ember.exe"
 
-%host% --http -p 80 --wwwroot="./web"
+%host% --http -p 8080 --wwwroot="./web"
 
 pause 
