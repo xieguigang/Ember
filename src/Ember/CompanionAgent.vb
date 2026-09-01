@@ -302,8 +302,14 @@ Public Class CompanionAgent : Implements IDisposable
 
         Try
             response = Await _mainClient.Chat(userInput)
+
             Call Console.WriteLine()
             Call Console.WriteLine()
+
+            If Not response Is Nothing Then
+                Call Console.WriteLine($"[LLM] kv_cache hit rate: {_mainClient.cache_hit_rate * 100:F2}%")
+                Call Console.WriteLine($"[LLM] {response.usage}")
+            End If
         Catch ex As Exception
             Call Console.Error.WriteLine($"[对话失败] {ex.Message}")
             Call Console.Error.WriteLine("可以稍后重试，本轮对话未计入画像总结轮次。")
